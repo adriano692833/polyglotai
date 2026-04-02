@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy } from 'lucide-react';
+import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
@@ -115,17 +115,17 @@ export default function App() {
   };
 
   if (isChecking) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 text-center">
-      <div className="h-16 w-16 rounded-2xl bg-orange-500 flex items-center justify-center shadow-lg animate-pulse mb-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc] dark:bg-[#080d1a] p-4 text-center">
+      <div className="h-16 w-16 rounded-2xl brand-gradient brand-shadow flex items-center justify-center shadow-lg animate-pulse mb-4">
         <Languages className="h-8 w-8 text-white" />
       </div>
-      <div className="flex items-center gap-2 text-muted-foreground mb-6">
+      <div className="flex items-center gap-2 text-slate-400 mb-6">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm">Ładowanie PolyGlotAI...</span>
+        <span className="text-sm font-medium">Ładowanie PolyGlotAI...</span>
       </div>
-      <button 
+      <button
         onClick={() => { localStorage.clear(); window.location.reload(); }}
-        className="text-xs text-slate-400 hover:text-orange-500 underline transition-colors"
+        className="text-xs text-slate-400 hover:text-brand-500 underline transition-colors"
       >
         Jeśli aplikacja się nie ładuje, kliknij tutaj aby zresetować
       </button>
@@ -135,69 +135,107 @@ export default function App() {
   if (!user) return <AuthScreen onLogin={setUser} />;
 
   return (
-    <div className={`min-h-screen flex flex-col transition-all duration-700 relative overflow-hidden font-sans ${isDarkMode ? 'dark bg-[#020617] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      {/* Dynamic Background Elements */}
+    <div className={`min-h-screen flex flex-col theme-transition relative overflow-hidden font-sans ${isDarkMode ? 'dark bg-[#080d1a] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
+      {/* Ambient background glows */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className={`absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] transition-all duration-1000 ${
-          isKidMode 
-            ? 'bg-purple-400/20 dark:bg-purple-600/10' 
-            : 'bg-brand-400/10 dark:bg-brand-600/5'
+        <div className={`absolute top-[-15%] left-[-10%] w-[55%] h-[55%] rounded-full blur-[140px] transition-all duration-1000 ${
+          isKidMode
+            ? 'bg-purple-400/15 dark:bg-purple-500/8'
+            : 'bg-brand-400/8 dark:bg-brand-500/6'
         }`} />
-        <div className={`absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] transition-all duration-1000 ${
-          isKidMode 
-            ? 'bg-pink-400/20 dark:bg-pink-600/10' 
-            : 'bg-blue-400/10 dark:bg-blue-600/5'
+        <div className={`absolute bottom-[-15%] right-[-10%] w-[55%] h-[55%] rounded-full blur-[140px] transition-all duration-1000 ${
+          isKidMode
+            ? 'bg-pink-400/15 dark:bg-pink-500/8'
+            : 'bg-accent-400/8 dark:bg-accent-500/5'
         }`} />
+        {/* Subtle grid pattern in light mode */}
+        <div className="absolute inset-0 opacity-[0.015] dark:opacity-0" style={{backgroundImage: 'linear-gradient(rgba(99,102,241,1) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,1) 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
       </div>
 
-      <div className={`relative z-10 flex flex-col min-h-screen transition-colors duration-500 ${isKidMode ? 'bg-white/30 dark:bg-transparent' : ''}`}>
+      <div className="relative z-10 flex flex-col min-h-screen">
         {/* Header */}
-        <header className={`sticky top-0 z-30 w-full border-b backdrop-blur-xl transition-all duration-500 ${
-          isKidMode 
-            ? 'bg-white/60 border-purple-100 dark:bg-slate-900/60 dark:border-purple-900/30' 
-            : 'bg-white/70 dark:bg-slate-900/70 border-slate-200/60 dark:border-slate-800/60'
+        <header className={`sticky top-0 z-30 w-full border-b backdrop-blur-2xl theme-transition ${
+          isKidMode
+            ? 'bg-white/80 border-purple-100/80 dark:bg-[#0d1424]/80 dark:border-purple-900/20'
+            : 'bg-white/80 border-slate-200/60 dark:bg-[#0d1424]/80 dark:border-white/[0.06]'
         }`}>
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <motion.div 
-              whileHover={{ scale: 1.05, rotate: 5 }}
-              whileTap={{ scale: 0.95 }}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-lg ${isKidMode ? 'bg-gradient-to-br from-pink-400 to-purple-400' : 'brand-gradient brand-shadow'}`}
-            >
-              <Languages className="h-6 w-6 text-white" />
-            </motion.div>
-            <h1 className="text-xl font-extrabold tracking-tight">
-              PolyGlot<span className={isKidMode ? 'text-purple-500' : 'text-brand-500'}>AI</span>
-            </h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2.5 text-slate-500 hover:text-brand-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-            >
-              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
-            <button 
-              onClick={() => setIsKidMode(!isKidMode)}
-              className={`px-5 py-2 rounded-full text-xs font-bold transition-all shadow-sm hover:scale-105 active:scale-95 ${isKidMode ? 'bg-white dark:bg-purple-800 text-pink-600 dark:text-pink-300 border-2 border-pink-200 dark:border-pink-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}`}
-            >
-              {isKidMode ? '🧒 Tryb Dziecka' : '🎓 Tryb Dorosły'}
-            </button>
-            <div className={`flex items-center gap-2.5 px-4 py-1.5 rounded-xl border transition-colors ${isKidMode ? 'bg-white dark:bg-purple-800 border-yellow-200 dark:border-purple-700' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-              <div className={`h-2 w-2 rounded-full animate-pulse ${isKidMode ? 'bg-pink-400' : 'bg-brand-500'}`} />
-              <span className="text-sm font-semibold">{user.name}</span>
+          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: 6 }}
+                whileTap={{ scale: 0.95 }}
+                className={`flex h-9 w-9 items-center justify-center rounded-xl shadow-md ${isKidMode ? 'bg-gradient-to-br from-pink-400 to-purple-500' : 'brand-gradient brand-shadow'}`}
+              >
+                <Languages className="h-5 w-5 text-white" />
+              </motion.div>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                PolyGlot<span className={`font-black ${isKidMode ? 'text-purple-500' : 'text-brand-500'}`}>AI</span>
+              </h1>
             </div>
-            <button onClick={logout} className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50/50 dark:hover:bg-red-900/20 rounded-xl transition-all">
-              <LogOut className="h-5 w-5" />
-            </button>
+
+            {/* Right controls */}
+            <div className="flex items-center gap-3">
+
+              {/* Theme toggle — animated switch */}
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                aria-label={isDarkMode ? 'Włącz tryb jasny' : 'Włącz tryb ciemny'}
+                className={`relative inline-flex h-8 w-[3.25rem] items-center rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
+                  isDarkMode
+                    ? 'bg-slate-700 hover:bg-slate-600'
+                    : 'bg-slate-200 hover:bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-all duration-300 ${
+                    isDarkMode
+                      ? 'translate-x-[1.625rem] bg-brand-500'
+                      : 'translate-x-1 bg-white'
+                  }`}
+                >
+                  {isDarkMode
+                    ? <Moon className="h-3.5 w-3.5 text-white" />
+                    : <Sun className="h-3.5 w-3.5 text-amber-500" />}
+                </span>
+              </button>
+
+              {/* Kid mode toggle */}
+              <button
+                onClick={() => setIsKidMode(!isKidMode)}
+                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${
+                  isKidMode
+                    ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50'
+                    : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-white/[0.06]'
+                }`}
+              >
+                {isKidMode ? '🧒 Dziecko' : '🎓 Dorosły'}
+              </button>
+
+              {/* User badge */}
+              <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-sm font-medium ${
+                isKidMode
+                  ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/40 text-purple-700 dark:text-purple-300'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/80 dark:border-white/[0.06] text-slate-700 dark:text-slate-300'
+              }`}>
+                <div className={`h-1.5 w-1.5 rounded-full animate-pulse ${isKidMode ? 'bg-pink-400' : 'bg-emerald-400'}`} />
+                {user.name}
+              </div>
+
+              {/* Logout */}
+              <button
+                onClick={logout}
+                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
+              >
+                <LogOut className="h-4.5 w-4.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
       {/* Navigation */}
-      <nav className="mx-auto w-full max-w-6xl px-6 py-6">
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
+      <nav className="mx-auto w-full max-w-6xl px-6 pt-5 pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-none">
           <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Moje Wyniki" : "Dashboard"} isKidMode={isKidMode} />
           <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
           <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label={isKidMode ? "Czytanie" : "Czytanie"} isKidMode={isKidMode} />
@@ -239,15 +277,15 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
   return (
     <button
       onClick={() => onClick(id)}
-      className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-sm font-bold transition-all whitespace-nowrap ${
-        active 
-          ? isKidMode 
-            ? 'bg-white shadow-xl text-purple-600 border-2 border-purple-200 scale-105' 
-            : 'bg-white dark:bg-slate-800 shadow-lg text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 scale-105' 
-          : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'
+      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+        active
+          ? isKidMode
+            ? 'bg-white dark:bg-purple-900/40 shadow-md text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/40'
+            : 'bg-white dark:bg-slate-800/80 shadow-md text-slate-900 dark:text-white border border-slate-200/80 dark:border-white/[0.08]'
+          : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/70 dark:hover:bg-slate-800/40 border border-transparent'
       }`}
     >
-      <span className={active ? (isKidMode ? 'text-purple-500' : 'text-brand-500') : ''}>{icon}</span>
+      <span className={active ? (isKidMode ? 'text-purple-500' : 'text-brand-500') : 'opacity-60'}>{icon}</span>
       {label}
     </button>
   );
@@ -286,77 +324,85 @@ function AuthScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#020617] px-4 relative overflow-hidden font-sans">
-      {/* Background blobs for Auth */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-brand-400/10 blur-[100px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-400/10 blur-[100px]" />
-      
-      <div className="w-full max-w-md glass rounded-[3rem] p-12 relative z-10">
-        <div className="flex flex-col items-center mb-12">
-          <motion.div 
-            whileHover={{ rotate: 12, scale: 1.1 }}
-            className="h-24 w-24 rounded-[2rem] brand-gradient flex items-center justify-center shadow-2xl brand-shadow mb-8"
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] dark:bg-[#080d1a] px-4 relative overflow-hidden font-sans">
+      {/* Ambient glows */}
+      <div className="absolute top-[-15%] left-[-10%] w-[45%] h-[45%] rounded-full bg-brand-400/10 dark:bg-brand-500/8 blur-[120px]" />
+      <div className="absolute bottom-[-15%] right-[-10%] w-[45%] h-[45%] rounded-full bg-accent-400/10 dark:bg-accent-500/6 blur-[120px]" />
+      {/* Subtle grid */}
+      <div className="absolute inset-0 opacity-[0.02] dark:opacity-0" style={{backgroundImage: 'linear-gradient(rgba(99,102,241,1) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,1) 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
+
+      <div className="w-full max-w-md glass rounded-3xl p-10 relative z-10">
+        {/* Header */}
+        <div className="flex flex-col items-center mb-10">
+          <motion.div
+            whileHover={{ rotate: 10, scale: 1.08 }}
+            whileTap={{ scale: 0.96 }}
+            className="h-20 w-20 rounded-2xl brand-gradient flex items-center justify-center shadow-xl brand-shadow mb-6"
           >
-            <Languages className="h-12 w-12 text-white" />
+            <Languages className="h-10 w-10 text-white" />
           </motion.div>
-          <h1 className="text-4xl font-black tracking-tighter text-gradient">
+          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
             PolyGlot<span className="text-brand-500">AI</span>
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-3 font-semibold tracking-wide uppercase">
-            {isRegister ? 'Dołącz do elity' : 'Witaj w przyszłości'}
+          <p className="text-slate-400 dark:text-slate-500 text-xs mt-2 font-medium tracking-[0.12em] uppercase">
+            {isRegister ? 'Utwórz konto' : 'Zaloguj się do konta'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Imię</label>
-            <input 
-              type="text" 
-              className="w-full px-5 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium"
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Imię</label>
+            <input
+              type="text"
+              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm transition-all"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Twoje imię"
               required
             />
           </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">PIN (min. 4 cyfry)</label>
-            <input 
-              type="password" 
-              className="w-full px-5 py-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium"
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">PIN (min. 4 cyfry)</label>
+            <input
+              type="password"
+              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm transition-all"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="****"
+              placeholder="••••"
               maxLength={8}
               required
             />
           </div>
-          
+
           {error && (
-            <motion.p 
-              initial={{ opacity: 0, y: -10 }}
+            <motion.p
+              initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-red-500 text-xs text-center font-bold"
+              className="text-red-500 dark:text-red-400 text-xs text-center font-medium bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded-xl py-2.5 px-4"
             >
               {error}
             </motion.p>
           )}
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full py-4 brand-gradient hover:opacity-90 text-white rounded-2xl font-bold shadow-xl brand-shadow transition-all disabled:opacity-50 active:scale-95"
+            className="w-full py-3.5 brand-gradient hover:opacity-90 active:opacity-80 text-white rounded-xl font-semibold text-sm shadow-lg brand-shadow transition-all disabled:opacity-50 active:scale-[0.98] mt-2"
           >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : (isRegister ? 'Zarejestruj się' : 'Zaloguj się')}
+            {loading
+              ? <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+              : (isRegister ? 'Zarejestruj się' : 'Zaloguj się')}
           </button>
         </form>
 
-        <button 
-          onClick={() => setIsRegister(!isRegister)}
-          className="w-full mt-8 text-sm font-bold text-slate-400 hover:text-brand-500 transition-colors"
-        >
-          {isRegister ? 'Masz już konto? Zaloguj się' : 'Nie masz konta? Zarejestruj się'}
-        </button>
+        <div className="mt-1 pt-6 border-t border-slate-100 dark:border-white/[0.06]">
+          <button
+            onClick={() => setIsRegister(!isRegister)}
+            className="w-full text-sm font-medium text-slate-400 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+          >
+            {isRegister ? 'Masz już konto? Zaloguj się' : 'Nie masz konta? Zarejestruj się'}
+          </button>
+        </div>
       </div>
     </div>
   );
