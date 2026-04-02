@@ -6,9 +6,10 @@ on:
       - main
 
 env:
+  PROJECT_ID: gen-lang-client-0801137156
   REGION: us-west1
   SERVICE: polyglotai
-  IMAGE: us-west1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/polyglotai
+  IMAGE: us-west1-docker.pkg.dev/gen-lang-client-0801137156/cloud-run-source-deploy/polyglotai
 
 jobs:
   deploy:
@@ -50,7 +51,7 @@ jobs:
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE:${{ github.sha }}" \
             --region "$REGION" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --project "$PROJECT_ID" \
             --platform managed \
             --allow-unauthenticated \
             --port 3000 \
@@ -63,5 +64,5 @@ jobs:
         run: |
           gcloud run services describe "$SERVICE" \
             --region "$REGION" \
-            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --project "$PROJECT_ID" \
             --format "value(status.url)"
