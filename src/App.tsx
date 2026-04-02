@@ -348,20 +348,20 @@ function AuthScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
           >
             <Languages className="h-10 w-10 text-white" />
           </motion.div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-3xl font-black tracking-tight text-slate-800 dark:text-white">
             PolyGlot<span className="text-brand-500">AI</span>
           </h1>
-          <p className="text-slate-400 dark:text-slate-500 text-xs mt-2 font-medium tracking-[0.12em] uppercase">
+          <p className="text-slate-500 dark:text-slate-400 text-xs mt-2 font-medium tracking-[0.12em] uppercase">
             {isRegister ? 'Utwórz konto' : 'Zaloguj się do konta'}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Imię</label>
+            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Imię</label>
             <input
               type="text"
-              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm transition-all"
+              className="w-full px-4 py-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Twoje imię"
@@ -369,10 +369,10 @@ function AuthScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest">PIN (min. 4 cyfry)</label>
+            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-widest">PIN (min. 4 cyfry)</label>
             <input
               type="password"
-              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm transition-all"
+              className="w-full px-4 py-3.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none font-medium text-sm"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               placeholder="••••"
@@ -402,10 +402,10 @@ function AuthScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
           </button>
         </form>
 
-        <div className="mt-1 pt-6 border-t border-slate-100 dark:border-white/[0.06]">
+        <div className="mt-1 pt-6 border-t border-slate-200 dark:border-slate-700">
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="w-full text-sm font-medium text-slate-400 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
+            className="w-full text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-brand-500 dark:hover:text-brand-400 transition-colors"
           >
             {isRegister ? 'Masz już konto? Zaloguj się' : 'Nie masz konta? Zarejestruj się'}
           </button>
