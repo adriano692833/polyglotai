@@ -9,15 +9,11 @@ env:
   PROJECT_ID: gen-lang-client-0801137156
   REGION: us-west1
   SERVICE: polyglotai
-  IMAGE: us-west1-docker.pkg.dev/gen-lang-client-0801137156/cloud-run-source-deploy/polyglotai
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Deploy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - name: Checkout
@@ -30,37 +26,22 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            --tag "$IMAGE:${{ github.sha }}" \
-            --tag "$IMAGE:latest" \
-            .
-
-      - name: Push Docker image
-        run: |
-          docker push "$IMAGE:${{ github.sha }}"
-          docker push "$IMAGE:latest"
-
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (source deploy)
         run: |
           gcloud run deploy "$SERVICE" \
-            --image "$IMAGE:${{ github.sha }}" \
+            --source . \
             --region "$REGION" \
             --project "$PROJECT_ID" \
-            --platform managed \
             --allow-unauthenticated \
             --port 3000 \
             --memory 512Mi \
-            --set-env-vars "NODE_ENV=production" \
-            --set-env-vars "DATABASE_URL=file:/data/db.sqlite" \
+            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite" \
             --quiet
 
-      - name: Show service URL
+      - name: Show URL
         run: |
           gcloud run services describe "$SERVICE" \
             --region "$REGION" \
