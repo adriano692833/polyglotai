@@ -123,6 +123,9 @@ export default function App() {
         <Loader2 className="h-4 w-4 animate-spin" />
         <span className="text-sm font-medium">Ładowanie PolyGlotAI...</span>
       </div>
+      <div className="text-xs font-mono text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+        v2 · build {new Date((globalThis as any).__BUILD_TIME__ ?? Date.now()).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+      </div>
       <button
         onClick={() => { localStorage.clear(); window.location.reload(); }}
         className="text-xs text-slate-400 hover:text-brand-500 underline transition-colors"
