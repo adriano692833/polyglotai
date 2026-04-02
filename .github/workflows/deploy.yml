@@ -9,6 +9,7 @@ env:
   PROJECT_ID: gen-lang-client-0801137156
   REGION: us-west1
   SERVICE: polyglotai
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
@@ -29,7 +30,14 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Deploy to Cloud Run (source deploy)
+      - name: Enable required APIs
+        run: |
+          gcloud services enable run.googleapis.com \
+            cloudbuild.googleapis.com \
+            artifactregistry.googleapis.com \
+            --project "$PROJECT_ID"
+
+      - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "$SERVICE" \
             --source . \
@@ -38,8 +46,7 @@ jobs:
             --allow-unauthenticated \
             --port 3000 \
             --memory 512Mi \
-            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite" \
-            --quiet
+            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite"
 
       - name: Show URL
         run: |
