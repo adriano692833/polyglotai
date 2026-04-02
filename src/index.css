@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
+  --color-brand-950: #431407;
+}
+
+@layer base {
+  body {
+    @apply antialiased selection:bg-brand-500/30;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/70 dark:bg-slate-900/40 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-xl;
+  }
+  
+  .glass-card {
+    @apply bg-white/40 dark:bg-slate-900/20 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-lg;
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-slate-900 to-slate-500 dark:from-white dark:to-slate-400;
+  }
+  
+  .brand-gradient {
+    @apply bg-gradient-to-br from-brand-400 to-brand-600;
+  }
+  
+  .brand-shadow {
+    @apply shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)];
+  }
+}
