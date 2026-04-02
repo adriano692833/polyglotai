@@ -268,6 +268,13 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Build version footer */}
+      <footer className="relative z-10 py-3 text-center">
+        <span className="text-[10px] font-mono text-slate-300 dark:text-slate-700 select-none">
+          build {new Date((globalThis as any).__BUILD_TIME__ ?? Date.now()).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+        </span>
+      </footer>
     </div>
     </div>
   );
