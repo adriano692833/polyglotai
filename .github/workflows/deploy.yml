@@ -59,6 +59,14 @@ jobs:
             --memory 512Mi \
             --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite,BUILD_ID=${{ github.sha }}"
 
+      - name: Set public access
+        run: |
+          gcloud run services add-iam-policy-binding "$SERVICE" \
+            --region="$REGION" \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --project="$PROJECT_ID" || true
+
       - name: Show URL
         run: |
           gcloud run services describe "$SERVICE" \
