@@ -19,6 +19,11 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Version check
+  app.get("/version", (req, res) => {
+    res.json({ version: "v2-indigo", build: process.env.BUILD_ID || "unknown" });
+  });
+
   // --- API ROUTES ---
 
   // Practice: Save Result
