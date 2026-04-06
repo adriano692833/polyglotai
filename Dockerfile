@@ -1,16 +1,18 @@
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
 
-# Pre-built dist is copied from GitHub Actions (nie buildujemy tu)
-COPY dist/ ./dist/
-COPY server.ts ./
-COPY prisma/ ./prisma/
-COPY tsconfig.json ./
-
+# Ten plik zmienia się przy każdym deployu — wymusza przebudowę cache
+COPY .build_id ./
+COPY . .
+RUN npm run build
 RUN npx prisma generate
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app ./
 
 ENV NODE_ENV=production
 ENV PORT=3000

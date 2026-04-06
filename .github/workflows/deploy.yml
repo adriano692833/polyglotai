@@ -20,17 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build frontend
-        run: npm run build
+      - name: Create build ID (cache buster)
+        run: echo "${{ github.sha }}-$(date +%s)" > .build_id
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
