@@ -9,6 +9,8 @@ env:
   PROJECT_ID: gen-lang-client-0801137156
   REGION: us-west1
   SERVICE: polyglotai
+  REGISTRY: us-west1-docker.pkg.dev
+  IMAGE: us-west1-docker.pkg.dev/gen-lang-client-0801137156/cloud-run-source-deploy/polyglotai
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -20,12 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create build ID (cache buster)
-        run: |
-          BUILD_ID="${{ github.sha }}-$(date +%s)"
-          echo "$BUILD_ID" > .build_id
-          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
-
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -36,16 +32,32 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build Docker image (no cache)
+        run: |
+          docker build \
+            --no-cache \
+            --tag "$IMAGE:${{ github.sha }}" \
+            --tag "$IMAGE:latest" \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "$SERVICE" \
-            --source . \
+            --image "$IMAGE:${{ github.sha }}" \
             --region "$REGION" \
             --project "$PROJECT_ID" \
             --allow-unauthenticated \
             --port 3000 \
             --memory 512Mi \
-            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite,BUILD_ID=${{ env.BUILD_ID }}"
+            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite,BUILD_ID=${{ github.sha }}"
 
       - name: Show URL
         run: |

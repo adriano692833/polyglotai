@@ -4,8 +4,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Ten plik zmienia się przy każdym deployu — wymusza przebudowę cache
-COPY .build_id ./
 COPY . .
 RUN npm run build
 RUN npx prisma generate
