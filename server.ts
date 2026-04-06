@@ -19,6 +19,13 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Disable all caching
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+  });
+
   // Version check
   app.get("/version", (req, res) => {
     res.json({ version: "v2-indigo", build: process.env.BUILD_ID || "unknown" });
