@@ -11,12 +11,15 @@ env:
   SERVICE: polyglotai
   REGISTRY: us-west1-docker.pkg.dev
   IMAGE: us-west1-docker.pkg.dev/gen-lang-client-0801137156/cloud-run-source-deploy/polyglotai
+  # Required to force google-github-actions to use Node 24 runtime
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -65,7 +68,7 @@ jobs:
             --region="$REGION" \
             --member="allUsers" \
             --role="roles/run.invoker" \
-            --project="$PROJECT_ID" || true
+            --project="$PROJECT_ID" || echo "IAM binding already exists or is not required, continuing."
 
       - name: Show URL
         run: |
