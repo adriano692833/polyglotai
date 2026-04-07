@@ -1,0 +1,78 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: gen-lang-client-0801137156
+  REGION: us-west1
+  SERVICE: polyglotai
+  REGISTRY: us-west1-docker.pkg.dev
+  IMAGE: us-west1-docker.pkg.dev/gen-lang-client-0801137156/cloud-run-source-deploy/polyglotai
+  # Required to force google-github-actions to use Node 24 runtime
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build Docker image (no cache)
+        run: |
+          docker build \
+            --no-cache \
+            --tag "$IMAGE:${{ github.sha }}" \
+            --tag "$IMAGE:latest" \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE:${{ github.sha }}" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --allow-unauthenticated \
+            --port 3000 \
+            --memory 512Mi \
+            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite,BUILD_ID=${{ github.sha }}"
+
+      - name: Set public access
+        run: |
+          gcloud run services add-iam-policy-binding "$SERVICE" \
+            --region="$REGION" \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --project="$PROJECT_ID" || echo "IAM binding already exists or is not required, continuing."
+
+      - name: Show URL
+        run: |
+          gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --format "value(status.url)"
