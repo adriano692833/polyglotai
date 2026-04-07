@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -32,6 +33,23 @@ async function startServer() {
   });
 
   // --- API ROUTES ---
+
+  // AI Proxy
+  app.post("/api/ai/generate", async (req, res) => {
+    try {
+      const { prompt, isJson } = req.body;
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: isJson ? { responseMimeType: "application/json" } : undefined
+      });
+      res.json({ text: response.text });
+    } catch (error) {
+      console.error("AI Error:", error);
+      res.status(500).json({ error: "Błąd generowania AI" });
+    }
+  });
 
   // Practice: Save Result
   app.post("/api/practice/save", async (req, res) => {

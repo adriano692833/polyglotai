@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
 
@@ -606,7 +605,6 @@ function WritePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boolean
     if (!text.trim()) return;
     setChecking(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Jesteś cierpliwym nauczycielem języka. Uczeń napisał tekst w języku: ${lang}.
 Popraw WSZYSTKIE błędy (gramatyka, słownictwo, interpunkcja).
 Oceń tekst w skali 0-100.
@@ -628,11 +626,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
 }
 Tekst ucznia: "${text}"`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const resultData = JSON.parse(response.text || "{}");
       setResult(resultData);
@@ -762,22 +761,12 @@ function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boo
     setResult(null);
     setUserAnswer('');
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
-      const prompt = `Jesteś nauczycielem języka. Wygeneruj zdanie po polsku do przetłumaczenia na język: ${lang}.
-Poziom: ${level}.
-Temat: ${topic}.
-Zwróć wynik WYŁĄCZNIE jako JSON:
-{
-  "polish": "zdanie po polsku",
-  "expected": "oczekiwane tłumaczenie",
-  "hint": "podpowiedź (np. użyj czasu przeszłego)"
-}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "{}");
       setCurrentTask(data);
@@ -792,25 +781,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
     if (!userAnswer.trim()) return;
     setChecking(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
-      const prompt = `Oceń tłumaczenie ucznia.
-Oryginał (PL): "${currentTask.polish}"
-Oczekiwane: "${currentTask.expected}"
-Uczeń napisał: "${userAnswer}"
-Język docelowy: ${lang}.
-Oceń w skali 0-100. Podaj feedback po polsku.
-Zwróć wynik WYŁĄCZNIE jako JSON:
-{
-  "score": 85,
-  "feedback": "Twoja opinia po polsku",
-  "correction": "poprawna wersja"
-}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "{}");
       setResult(data);
@@ -918,27 +894,21 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const generate = async () => {
     setGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
-      const num = 8;
-      const prompt = `Jesteś nauczycielem języka. Stwórz ${num} fiszek do nauki języka: ${lang}.
-Temat: ${topic}.
-Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
-[{"front": "słowo/zdanie w obcym języku", "back": "tłumaczenie po polsku"}]`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const cardsData = JSON.parse(response.text || "[]");
 
-      const res = await fetch('/api/flashcards/save', {
+      const saveRes = await fetch('/api/flashcards/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, lang, cards: cardsData }),
       });
-      const data = await res.json();
+      const data = await saveRes.json();
       if (data.flashcards && Array.isArray(data.flashcards)) {
         setCards([...data.flashcards, ...cards]);
         setTopic('');
@@ -1174,17 +1144,18 @@ function Translator({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
     if (!sourceText.trim()) return;
     setLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Jesteś profesjonalnym tłumaczem AI. Tłumacz z pełną precyzją i naturalnością.
 ZASADY: Tłumacz TYLKO tekst. Zwróć SAMO tłumaczenie, nic więcej.
 Poziom CEFR: ${level || 'none'}
 Styl: ${style || 'none'}
 Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: false })
       });
+      const response = await res.json();
       const translation = response.text || "";
       setTranslatedText(translation);
 
@@ -1313,11 +1284,13 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
 
   const translateWord = async (word: string) => {
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`,
+      const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: false })
       });
+      const response = await res.json();
       return response.text?.trim() || null;
     } catch (err) {
       return null;
@@ -1362,7 +1335,6 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
     setGenerating(true);
     setExpandedSentences({});
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Jesteś nauczycielem języka. Stwórz tekst do czytania w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'dowolny ciekawy temat'}.
@@ -1381,11 +1353,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   ]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "{}");
       setResult(data);
@@ -1564,7 +1537,6 @@ function Sentences({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
   const generate = async () => {
     setGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Jesteś nauczycielem języka. Stwórz 10 ciekawych zdań w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'codzienne sytuacje'}.
@@ -1573,11 +1545,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
   {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
 ]`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "[]");
       setSentences(data);
@@ -1664,7 +1637,6 @@ function Challenge({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
     setResult(null);
     setAnswer('');
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Jesteś nauczycielem języka. Stwórz codzienne wyzwanie pisemne w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic}.
@@ -1675,11 +1647,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "hints": ["podpowiedź 1", "podpowiedź 2"]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "{}");
       setChallenge(data);
@@ -1694,7 +1667,6 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
     if (!answer.trim()) return;
     setChecking(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (window as any).process?.env?.GEMINI_API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "" });
       const prompt = `Oceń odpowiedź ucznia na wyzwanie: "${challenge.title}".
 Polecenie brzmiało: "${challenge.prompt}".
 Odpowiedź ucznia: "${answer}".
@@ -1707,11 +1679,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "correction": "poprawiona wersja tekstu"
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, isJson: true })
       });
+      const response = await res.json();
 
       const data = JSON.parse(response.text || "{}");
       setResult(data);
