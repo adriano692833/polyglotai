@@ -1,0 +1,6 @@
+node_modules
+.git
+*.md
+prisma/dev.db
+prisma/prisma/dev.db
+dist
