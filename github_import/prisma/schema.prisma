@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PinAccount {
+  id        String   @id @default(cuid())
+  name      String
+  pin       String
+  token     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Translation {
+  id             String   @id @default(cuid())
+  sourceLang     String
+  targetLang     String
+  sourceText     String
+  translatedText String
+  level          String   @default("none")
+  style          String   @default("none")
+  userId         String?
+  createdAt      DateTime @default(now())
+}
+
+model WritingPractice {
+  id             String   @id @default(cuid())
+  userId         String?
+  targetLang     String
+  originalText   String
+  correctedText  String
+  mistakes        String
+  score          Int
+  level          String   @default("none")
+  createdAt      DateTime @default(now())
+}
+
+model FlashcardCategory {
+  id        String     @id @default(cuid())
+  userId    String?
+  name      String
+  icon      String    @default("📁")
+  color     String    @default("#6366f1")
+  lang      String    @default("en")
+  isDefault Boolean   @default(false)
+  cardCount Int       @default(0)
+  createdAt DateTime  @default(now())
+  flashcards Flashcard[]
+}
+
+model Flashcard {
+  id             String   @id @default(cuid())
+  userId         String?
+  lang           String
+  front          String
+  back           String
+  category       String   @default("other")
+  categoryId     String?
+  status         String   @default("new")
+  reviews        Int      @default(0)
+  lastReview     DateTime?
+  nextReview     DateTime?
+  createdAt      DateTime @default(now())
+  categoryRef    FlashcardCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+}
+
+model UserPoints {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  points         Int      @default(0)
+  level          Int      @default(1)
+  streak         Int      @default(0)
+  lastActiveDate String?
+  badges         String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model VocabWord {
+  id          String   @id @default(cuid())
+  userId      String?
+  lang        String
+  word        String
+  translation String
+  context     String
+  definition  String
+  reviewed    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model PointLog {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+model DailyChallenge {
+  id        String   @id @default(cuid())
+  date      String   @unique
+  lang      String   @default("en")
+  prompt    String
+  level     String   @default("b1")
+  createdAt DateTime @default(now())
+}
