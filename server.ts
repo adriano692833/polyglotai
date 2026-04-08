@@ -45,7 +45,7 @@ async function startServer() {
           "HTTP-Referer": process.env.APP_URL || "https://polyglotai.onrender.com",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-exp:free",
+          model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
           messages: [{ role: "user", content: prompt }],
           ...(isJson && { response_format: { type: "json_object" } }),
         }),

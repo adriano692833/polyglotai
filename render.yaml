@@ -12,3 +12,5 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENROUTER_MODEL
+        value: minimax/minimax-m2.5:free
