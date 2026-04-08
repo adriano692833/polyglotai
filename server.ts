@@ -8,6 +8,11 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+function stripMarkdownJson(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  return match ? match[1].trim() : text.trim();
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -52,7 +57,8 @@ async function startServer() {
       });
       const data = await response.json() as any;
       if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
-      res.json({ text: data.choices[0].message.content });
+      const rawText = data.choices[0].message.content;
+      res.json({ text: isJson ? stripMarkdownJson(rawText) : rawText });
     } catch (error) {
       console.error("AI Error:", error);
       res.status(500).json({ error: "Błąd generowania AI" });
