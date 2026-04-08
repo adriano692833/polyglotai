@@ -8,7 +8,6 @@ import dotenv from "dotenv";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const { YoutubeTranscript } = require("youtube-transcript");
 const getVideoId = require("get-video-id").default ?? require("get-video-id");
 
 dotenv.config();
@@ -32,13 +31,34 @@ async function fetchYouTubeTranscript(url: string): Promise<{ title: string; tra
   const { id: videoId } = getVideoId(url);
   if (!videoId) throw new Error("Nieprawidłowy link YouTube");
 
-  const segments = await YoutubeTranscript.fetchTranscript(videoId);
-  if (!segments || segments.length === 0) throw new Error("Brak napisów dla tego filmu");
+  const BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  };
 
-  const transcript = segments.map((s) => s.text).join(" ").replace(/\s+/g, " ").trim();
-  if (!transcript) throw new Error("Napisy są puste");
+  // Try direct timedtext API for multiple languages
+  const langs = ["en", "pl", "a.en", "a.pl", "de", "fr", "es"];
+  for (const lang of langs) {
+    try {
+      const resp = await fetchWithTimeout(
+        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`,
+        { headers: BROWSER_HEADERS },
+        10000
+      );
+      if (!resp.ok) continue;
+      const data = await resp.json() as any;
+      const transcript = data.events
+        ?.filter((e: any) => e.segs)
+        ?.flatMap((e: any) => e.segs.map((s: any) => s.utf8 || ""))
+        ?.join(" ")
+        ?.replace(/\s+/g, " ")
+        ?.trim();
+      if (transcript) return { title: `YouTube ${videoId}`, transcript, videoId };
+    } catch {}
+  }
 
-  return { title: `YouTube ${videoId}`, transcript, videoId };
+  throw new Error("Nie udało się pobrać transkrypcji. Upewnij się że film ma napisy i jest publiczny.");
 }
 
 function resolvePrompt(body: any): string {
