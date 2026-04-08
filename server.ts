@@ -5,7 +5,6 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
@@ -38,13 +37,22 @@ async function startServer() {
   app.post("/api/ai/generate", async (req, res) => {
     try {
       const { prompt, isJson } = req.body;
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-        config: isJson ? { responseMimeType: "application/json" } : undefined
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.APP_URL || "https://polyglotai.onrender.com",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.0-flash-exp:free",
+          messages: [{ role: "user", content: prompt }],
+          ...(isJson && { response_format: { type: "json_object" } }),
+        }),
       });
-      res.json({ text: response.text });
+      const data = await response.json() as any;
+      if (!response.ok) throw new Error(data.error?.message || "AI error");
+      res.json({ text: data.choices[0].message.content });
     } catch (error) {
       console.error("AI Error:", error);
       res.status(500).json({ error: "Błąd generowania AI" });
