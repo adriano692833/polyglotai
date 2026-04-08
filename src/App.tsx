@@ -902,9 +902,11 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const [cards, setCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [quickGenerating, setQuickGenerating] = useState(false);
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [lang, setLang] = useState('en');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
+  const [quickPrompt, setQuickPrompt] = useState('');
 
   useEffect(() => {
     fetch(`/api/flashcards?userId=${user.id}`)
@@ -947,6 +949,37 @@ Zwróć WYŁĄCZNIE JSON (tablica):
     }
   };
 
+  const generateOnDemand = async () => {
+    if (!quickPrompt.trim()) return;
+    setQuickGenerating(true);
+    try {
+      const prompt = `Na podstawie polecenia użytkownika wygeneruj 3 fiszki do nauki języka ${lang}.
+Polecenie użytkownika: "${quickPrompt}".
+Zwróć WYŁĄCZNIE JSON (tablica):
+[
+  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
+]`;
+      const aiText = await requestAiText(prompt, true);
+      const cardsData = parseAiJson<any[]>(aiText, []).filter((c: any) => c?.front && c?.back);
+      if (!cardsData.length) return;
+
+      const saveRes = await fetch('/api/flashcards/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, lang, cards: cardsData }),
+      });
+      const data = await saveRes.json();
+      if (Array.isArray(data.flashcards)) {
+        setCards([...data.flashcards, ...cards]);
+        setQuickPrompt('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setQuickGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -973,6 +1006,24 @@ Zwróć WYŁĄCZNIE JSON (tablica):
       </div>
 
       <div className="glass rounded-[2.5rem] p-10 border border-white/20 dark:border-white/5 shadow-2xl">
+        <div className="mb-8 space-y-3">
+          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Generuj na zawołanie</label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              value={quickPrompt}
+              onChange={(e) => setQuickPrompt(e.target.value)}
+              placeholder="Np. podróż pociągiem, rozmowa u lekarza, czasowniki nieregularne..."
+              className="flex-1 bg-white/50 dark:bg-slate-900/50 border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3.5 outline-none font-semibold"
+            />
+            <button
+              onClick={generateOnDemand}
+              disabled={quickGenerating || !quickPrompt.trim()}
+              className={`px-6 py-3.5 rounded-2xl font-black shadow-xl transition-all disabled:opacity-50 ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
+            >
+              {quickGenerating ? "Generuję..." : "Generuj 3 fiszki"}
+            </button>
+          </div>
+        </div>
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
       </div>
 
