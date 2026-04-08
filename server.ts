@@ -5,27 +5,14 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import { YoutubeTranscript } from "youtube-transcript";
+import getVideoId from "get-video-id";
 
 dotenv.config();
 
 function stripMarkdownJson(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   return match ? match[1].trim() : text.trim();
-}
-
-function extractYouTubeVideoId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.replace("/", "").trim() || null;
-    }
-    if (parsed.hostname.includes("youtube.com")) {
-      return parsed.searchParams.get("v");
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30000) {
@@ -39,48 +26,16 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs =
 }
 
 async function fetchYouTubeTranscript(url: string): Promise<{ title: string; transcript: string; videoId: string }> {
-  const videoId = extractYouTubeVideoId(url);
+  const { id: videoId } = getVideoId(url);
   if (!videoId) throw new Error("Nieprawidłowy link YouTube");
 
-  const watchRes = await fetchWithTimeout(`https://www.youtube.com/watch?v=${videoId}`, {}, 20000);
-  if (!watchRes.ok) throw new Error("Nie udało się pobrać strony filmu");
-  const watchHtml = await watchRes.text();
+  const segments = await YoutubeTranscript.fetchTranscript(videoId);
+  if (!segments || segments.length === 0) throw new Error("Brak napisów dla tego filmu");
 
-  const titleMatch = watchHtml.match(/<title>(.*?)<\/title>/i);
-  const title = (titleMatch?.[1] || `YouTube ${videoId}`).replace(" - YouTube", "").trim();
+  const transcript = segments.map((s) => s.text).join(" ").replace(/\s+/g, " ").trim();
+  if (!transcript) throw new Error("Napisy są puste");
 
-  const captionMatch = watchHtml.match(/"captionTracks":(\[.*?\])/);
-  if (!captionMatch) throw new Error("Brak napisów dla tego filmu");
-
-  const captionTracks = JSON.parse(captionMatch[1]) as any[];
-  const preferredTrack =
-    captionTracks.find((track) => track.languageCode?.startsWith("en")) ||
-    captionTracks.find((track) => track.languageCode?.startsWith("pl")) ||
-    captionTracks[0];
-
-  if (!preferredTrack?.baseUrl) throw new Error("Nie znaleziono ścieżki napisów");
-
-  const captionsRes = await fetchWithTimeout(preferredTrack.baseUrl, {}, 20000);
-  if (!captionsRes.ok) throw new Error("Nie udało się pobrać napisów");
-  const captionsXml = await captionsRes.text();
-
-  const transcript = captionsXml
-    .replace(/<\/*transcript>/g, "")
-    .split(/<\/text>/)
-    .map((chunk) => chunk.replace(/<text[^>]*>/, "").trim())
-    .filter(Boolean)
-    .map((line) =>
-      line
-        .replace(/&amp;/g, "&")
-        .replace(/&quot;/g, "\"")
-        .replace(/&#39;/g, "'")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-    )
-    .join(" ");
-
-  if (!transcript.trim()) throw new Error("Napisy są puste");
-  return { title, transcript, videoId };
+  return { title: `YouTube ${videoId}`, transcript, videoId };
 }
 
 function resolvePrompt(body: any): string {
