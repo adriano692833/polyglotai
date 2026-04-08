@@ -34,6 +34,22 @@ async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
   } finally {
     clearTimeout(timeout);
   }
+  const res = await fetch('/api/ai/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, isJson })
+  });
+
+  const response = await res.json();
+  if (!res.ok) {
+    throw new Error(response?.error || 'Błąd komunikacji z AI');
+  }
+
+  if (typeof response?.text !== 'string') {
+    throw new Error('Niepoprawna odpowiedź AI');
+  }
+
+  return response.text;
 }
 
 function parseAiJson<T>(text: string, fallback: T): T {
@@ -121,6 +137,9 @@ function TranscriptPicker({
     } catch (err) {
       console.error(err);
       setStatus('Błąd importu transkrypcji. Sprawdź logi serwera.');
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
       setImporting(false);
     }
@@ -139,6 +158,8 @@ function TranscriptPicker({
     } catch (err) {
       console.error(err);
       setStatus('Błąd usuwania transkrypcji.');
+    } catch (err) {
+      console.error(err);
     } finally {
       setDeleting(false);
     }
@@ -1158,6 +1179,12 @@ Zwróć WYŁĄCZNIE JSON (tablica):
     } catch (err) {
       console.error(err);
       setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
+      if (Array.isArray(data.flashcards)) {
+        setCards([...data.flashcards, ...cards]);
+        setQuickPrompt('');
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
       setQuickGenerating(false);
     }
