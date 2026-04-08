@@ -37,9 +37,7 @@ async function startServer() {
   app.post("/api/ai/generate", async (req, res) => {
     try {
       const { prompt, isJson } = req.body;
-      const model = process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free";
-      console.log(`[AI] model=${model} isJson=${isJson} prompt=${String(prompt).slice(0, 100)}...`);
-
+      const model = process.env.OPENROUTER_MODEL || "openrouter/free";
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -53,7 +51,6 @@ async function startServer() {
         }),
       });
       const data = await response.json() as any;
-      console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
       if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
       res.json({ text: data.choices[0].message.content });
     } catch (error) {
