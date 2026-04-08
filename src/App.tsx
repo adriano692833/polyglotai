@@ -137,9 +137,6 @@ function TranscriptPicker({
     } catch (err) {
       console.error(err);
       setStatus('Błąd importu transkrypcji. Sprawdź logi serwera.');
-      }
-    } catch (err) {
-      console.error(err);
     } finally {
       setImporting(false);
     }
@@ -158,8 +155,6 @@ function TranscriptPicker({
     } catch (err) {
       console.error(err);
       setStatus('Błąd usuwania transkrypcji.');
-    } catch (err) {
-      console.error(err);
     } finally {
       setDeleting(false);
     }
@@ -1179,12 +1174,6 @@ Zwróć WYŁĄCZNIE JSON (tablica):
     } catch (err) {
       console.error(err);
       setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
-      if (Array.isArray(data.flashcards)) {
-        setCards([...data.flashcards, ...cards]);
-        setQuickPrompt('');
-      }
-    } catch (err) {
-      console.error(err);
     } finally {
       setQuickGenerating(false);
     }
