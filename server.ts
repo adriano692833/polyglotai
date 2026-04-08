@@ -43,7 +43,6 @@ async function fetchYouTubeTranscript(url: string): Promise<{ title: string; tra
   if (!videoId) throw new Error("Nieprawidłowy link YouTube");
 
   const watchRes = await fetchWithTimeout(`https://www.youtube.com/watch?v=${videoId}`, {}, 20000);
-  const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
   if (!watchRes.ok) throw new Error("Nie udało się pobrać strony filmu");
   const watchHtml = await watchRes.text();
 
@@ -62,7 +61,6 @@ async function fetchYouTubeTranscript(url: string): Promise<{ title: string; tra
   if (!preferredTrack?.baseUrl) throw new Error("Nie znaleziono ścieżki napisów");
 
   const captionsRes = await fetchWithTimeout(preferredTrack.baseUrl, {}, 20000);
-  const captionsRes = await fetch(preferredTrack.baseUrl);
   if (!captionsRes.ok) throw new Error("Nie udało się pobrać napisów");
   const captionsXml = await captionsRes.text();
 
@@ -139,7 +137,6 @@ async function startServer() {
       const model = process.env.OPENROUTER_MODEL || "openrouter/free";
       console.log(`[AI] model=${model} isJson=${isJson} prompt=${prompt.slice(0, 100)}...`);
       const response = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -153,7 +150,6 @@ async function startServer() {
       }, 60000);
       const data = await response.json() as any;
       console.log(`[AI] status=${response.status} durationMs=${Date.now() - startedAt} data=${JSON.stringify(data).slice(0, 300)}`);
-      console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
       if (!response.ok || data.error) {
         return res.status(response.status || 500).json({ error: data.error?.message || "AI error" });
       }
@@ -190,9 +186,6 @@ async function startServer() {
       const { userId, url, lang } = req.body;
       if (!userId || !url) return res.status(400).json({ error: "Brak danych wejściowych" });
       console.log(`[TRANSCRIPT] import:start userId=${userId} url=${url}`);
-    try {
-      const { userId, url, lang } = req.body;
-      if (!userId || !url) return res.status(400).json({ error: "Brak danych wejściowych" });
       const { title, transcript, videoId } = await fetchYouTubeTranscript(String(url));
 
       const existing = await prisma.transcriptSource.findFirst({
@@ -218,8 +211,6 @@ async function startServer() {
       res.json(created);
     } catch (error: any) {
       console.error(`[TRANSCRIPT] import:error durationMs=${Date.now() - startedAt}`, error?.message || error);
-      res.json(created);
-    } catch (error: any) {
       res.status(500).json({ error: error?.message || "Błąd importu transkrypcji" });
     }
   });
