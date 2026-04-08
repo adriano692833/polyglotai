@@ -14,9 +14,6 @@ COPY --from=builder /app ./
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV DATABASE_URL=file:/data/db.sqlite
-
-RUN mkdir -p /data
 
 EXPOSE 3000
-CMD ["npx", "tsx", "server.ts"]
+CMD sh -c "npx prisma migrate deploy && npx tsx server.ts"

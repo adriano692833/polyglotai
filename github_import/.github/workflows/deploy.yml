@@ -57,7 +57,8 @@ jobs:
             --allow-unauthenticated \
             --port 3000 \
             --memory 512Mi \
-            --set-env-vars "NODE_ENV=production,DATABASE_URL=file:/data/db.sqlite,BUILD_ID=${{ github.sha }}"
+            --set-env-vars "NODE_ENV=production,BUILD_ID=${{ github.sha }}" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest"
 
       - name: Set public access
         run: |
