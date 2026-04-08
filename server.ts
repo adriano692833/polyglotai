@@ -13,6 +13,23 @@ function stripMarkdownJson(text: string): string {
   return match ? match[1].trim() : text.trim();
 }
 
+function resolvePrompt(body: any): string {
+  if (typeof body?.prompt === "string" && body.prompt.trim()) {
+    return body.prompt.trim();
+  }
+
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const firstUserMessage = messages.find(
+    (msg: any) => msg?.role === "user" && typeof msg?.content === "string" && msg.content.trim()
+  );
+
+  if (firstUserMessage) {
+    return firstUserMessage.content.trim();
+  }
+
+  return "";
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -41,9 +58,13 @@ async function startServer() {
   // AI Proxy
   app.post("/api/ai/generate", async (req, res) => {
     try {
-      const { prompt, isJson } = req.body;
+      const { isJson } = req.body;
+      const prompt = resolvePrompt(req.body);
+      if (!prompt) {
+        return res.status(400).json({ error: "Brak promptu do wygenerowania odpowiedzi AI" });
+      }
       const model = process.env.OPENROUTER_MODEL || "openrouter/free";
-      console.log(`[AI] model=${model} isJson=${isJson} prompt=${String(prompt).slice(0, 100)}...`);
+      console.log(`[AI] model=${model} isJson=${isJson} prompt=${prompt.slice(0, 100)}...`);
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -58,7 +79,9 @@ async function startServer() {
       });
       const data = await response.json() as any;
       console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
-      if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
+      if (!response.ok || data.error) {
+        return res.status(response.status || 500).json({ error: data.error?.message || "AI error" });
+      }
       const rawText = data.choices[0].message.content;
       res.json({ text: isJson ? stripMarkdownJson(rawText) : rawText });
     } catch (error) {

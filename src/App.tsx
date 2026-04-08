@@ -5,6 +5,32 @@ import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
 
 // --- COMPONENTS ---
+async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
+  const res = await fetch('/api/ai/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, isJson })
+  });
+
+  const response = await res.json();
+  if (!res.ok) {
+    throw new Error(response?.error || 'Błąd komunikacji z AI');
+  }
+
+  if (typeof response?.text !== 'string') {
+    throw new Error('Niepoprawna odpowiedź AI');
+  }
+
+  return response.text;
+}
+
+function parseAiJson<T>(text: string, fallback: T): T {
+  try {
+    return JSON.parse(text || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
 
 function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange: (v: string) => void, isKidMode: boolean }) {
   const [isCustom, setIsCustom] = useState(false);
@@ -626,14 +652,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
 }
 Tekst ucznia: "${text}"`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const resultData = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const resultData = parseAiJson<any>(aiText, { corrected: '', score: 0, mistakes: [], praise: '', tip: '' });
       setResult(resultData);
 
       // Save to DB
@@ -716,7 +736,7 @@ Tekst ucznia: "${text}"`;
               <p className="text-2xl leading-relaxed font-bold tracking-tight">{result.corrected}</p>
             </div>
 
-            {result.mistakes.length > 0 && (
+            {Array.isArray(result.mistakes) && result.mistakes.length > 0 && (
               <div className="grid gap-4">
                 <h4 className={`text-xs font-black px-4 uppercase tracking-[0.2em] ${isKidMode ? 'text-purple-400' : 'text-slate-400'}`}>
                   {isKidMode ? "Małe poprawki:" : "Znalezione błędy:"}
@@ -761,14 +781,15 @@ function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boo
     setResult(null);
     setUserAnswer('');
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const prompt = `Jesteś nauczycielem języka. Przygotuj zadanie tłumaczeniowe.
+Język docelowy: ${lang}. Poziom: ${level}. Temat: ${topic || 'codzienne sytuacje'}.
+Zwróć WYŁĄCZNIE JSON:
+{
+  "polish": "jedno zdanie po polsku do przetłumaczenia",
+  "hint": "krótka wskazówka po polsku"
+}`;
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setCurrentTask(data);
     } catch (err) {
       console.error(err);
@@ -781,14 +802,19 @@ function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boo
     if (!userAnswer.trim()) return;
     setChecking(true);
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const prompt = `Oceń tłumaczenie ucznia.
+Język docelowy: ${lang}
+Zdanie bazowe po polsku: "${currentTask?.polish || ''}"
+Odpowiedź ucznia: "${userAnswer}"
+Poziom: ${level}
+Zwróć WYŁĄCZNIE JSON:
+{
+  "score": 0,
+  "feedback": "krótki feedback po polsku",
+  "correction": "poprawna wersja odpowiedzi ucznia w języku docelowym"
+}`;
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -894,14 +920,13 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const generate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const cardsData = JSON.parse(response.text || "[]");
+      const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.
+Zwróć WYŁĄCZNIE JSON (tablica):
+[
+  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
+]`;
+      const aiText = await requestAiText(prompt, true);
+      const cardsData = parseAiJson<any[]>(aiText, []);
 
       const saveRes = await fetch('/api/flashcards/save', {
         method: 'POST',
@@ -1150,13 +1175,7 @@ Poziom CEFR: ${level || 'none'}
 Styl: ${style || 'none'}
 Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: false })
-      });
-      const response = await res.json();
-      const translation = response.text || "";
+      const translation = await requestAiText(prompt, false);
       setTranslatedText(translation);
 
       // Save to DB
@@ -1275,6 +1294,7 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const [expandedSentences, setExpandedSentences] = useState<Record<number, boolean>>({});
   const hoverTimeout = useRef<any>(null);
   const isTranslating = useRef<boolean>(false);
+  const hoverRequestId = useRef(0);
 
   const speak = (text: string, language: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
@@ -1285,13 +1305,8 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const translateWord = async (word: string) => {
     try {
       const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: false })
-      });
-      const response = await res.json();
-      return response.text?.trim() || null;
+      const responseText = await requestAiText(prompt, false);
+      return responseText.trim() || null;
     } catch (err) {
       return null;
     }
@@ -1308,19 +1323,24 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
       
       const cleanWord = word.replace(/[.,!?;:]/g, '').trim();
       if (!cleanWord) return;
+      const requestId = ++hoverRequestId.current;
+      const normalizedWord = cleanWord.toLowerCase();
 
       // Check if word is in vocabulary first
       const vocabMatch = result?.vocabulary?.find((v: any) => 
-        v.word.toLowerCase() === cleanWord.toLowerCase() || 
-        cleanWord.toLowerCase().includes(v.word.toLowerCase())
+        typeof v?.word === 'string' && v.word.toLowerCase() === normalizedWord
       );
       
       if (vocabMatch) {
-        setHoveredWord({ word: cleanWord, translation: vocabMatch.translation, x, y });
+        if (hoverRequestId.current === requestId) {
+          setHoveredWord({ word: cleanWord, translation: vocabMatch.translation, x, y });
+        }
       } else {
         isTranslating.current = true;
         const translation = await translateWord(cleanWord);
-        setHoveredWord({ word: cleanWord, translation, x, y });
+        if (hoverRequestId.current === requestId) {
+          setHoveredWord({ word: cleanWord, translation, x, y });
+        }
         isTranslating.current = false;
       }
     }, 300);
@@ -1328,6 +1348,7 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
 
   const handleWordMouseLeave = () => {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverRequestId.current += 1;
     setHoveredWord(null);
   };
 
@@ -1353,14 +1374,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   ]
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -1545,14 +1560,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
   {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
 ]`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "[]");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any[]>(aiText, []);
       setSentences(data);
     } catch (err) {
       console.error(err);
@@ -1647,14 +1656,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "hints": ["podpowiedź 1", "podpowiedź 2"]
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setChallenge(data);
     } catch (err) {
       console.error(err);
@@ -1679,14 +1682,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "correction": "poprawiona wersja tekstu"
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
