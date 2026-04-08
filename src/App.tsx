@@ -210,8 +210,20 @@ function TranscriptPicker({
   );
 }
 
-function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange: (v: string) => void, isKidMode: boolean }) {
+function TopicSelector({ value, onChange, isKidMode, disabled, transcriptTitle }: { value: string, onChange: (v: string) => void, isKidMode: boolean, disabled?: boolean, transcriptTitle?: string }) {
   const [isCustom, setIsCustom] = useState(false);
+
+  if (disabled) {
+    return (
+      <div className="space-y-3">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1 opacity-60">Temat:</p>
+        <div className="flex items-center gap-3 px-5 py-3 rounded-2xl glass border-2 border-brand-500/30 text-brand-500 font-black text-sm">
+          <span className="text-xl">📹</span>
+          <span className="truncate">{transcriptTitle || 'Transkrypcja YouTube'}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -222,7 +234,7 @@ function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange
             key={t.id}
             onClick={() => { onChange(t.name); setIsCustom(false); }}
             className={`px-6 py-3 rounded-2xl text-sm font-black transition-all flex items-center gap-3 border-2 transform active:scale-95 ${
-              !isCustom && value === t.name 
+              !isCustom && value === t.name
                 ? (isKidMode ? 'brand-gradient border-purple-400 text-white shadow-2xl' : 'brand-gradient border-brand-400 text-white shadow-2xl brand-shadow')
                 : 'glass border-white/20 dark:border-white/5 hover:border-brand-500/50 dark:hover:border-brand-500/30'
             }`}
@@ -234,7 +246,7 @@ function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange
         <button
           onClick={() => setIsCustom(true)}
           className={`px-6 py-3 rounded-2xl text-sm font-black transition-all flex items-center gap-3 border-2 transform active:scale-95 ${
-            isCustom 
+            isCustom
               ? (isKidMode ? 'brand-gradient border-purple-400 text-white shadow-2xl' : 'brand-gradient border-brand-400 text-white shadow-2xl brand-shadow')
               : 'glass border-white/20 dark:border-white/5 hover:border-brand-500/50 dark:hover:border-brand-500/30'
           }`}
@@ -450,6 +462,7 @@ export default function App() {
           <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label={isKidMode ? "Słówka" : "Słówka"} isKidMode={isKidMode} />
           <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label={isKidMode ? "Wyzwanie" : "Wyzwanie"} isKidMode={isKidMode} />
           <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label={isKidMode ? "Tłumacz" : "Tłumacz"} isKidMode={isKidMode} />
+          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="Transkrypcje" isKidMode={isKidMode} />
         </div>
       </nav>
 
@@ -471,6 +484,7 @@ export default function App() {
             {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} />}
             {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} />}
             {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} />}
+            {activeTab === 'transcripts' && <TranscriptViewer user={user} isKidMode={isKidMode} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1229,7 +1243,7 @@ Zwróć WYŁĄCZNIE JSON (tablica):
             </button>
           </div>
         </div>
-        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
+        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} disabled={!!selectedTranscript} transcriptTitle={selectedTranscript?.title} />
         {statusMessage && <p className="mt-4 text-sm font-bold text-brand-500">{statusMessage}</p>}
       </div>
 
@@ -1681,8 +1695,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
           selectedId={selectedTranscript?.id || null}
           onSelect={setSelectedTranscript}
         />
-        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
-        <button 
+        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} disabled={!!selectedTranscript} transcriptTitle={selectedTranscript?.title} />
+        <button
           onClick={generate}
           disabled={generating}
           className={`w-full py-5 rounded-2xl font-bold shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-[0.98] ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient brand-shadow text-white'}`}
@@ -1874,8 +1888,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
           selectedId={selectedTranscript?.id || null}
           onSelect={setSelectedTranscript}
         />
-        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
-        <button 
+        <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} disabled={!!selectedTranscript} transcriptTitle={selectedTranscript?.title} />
+        <button
           onClick={generate}
           disabled={generating}
           className={`w-full py-5 rounded-2xl font-black shadow-2xl transition-all flex items-center justify-center gap-4 disabled:opacity-50 transform active:scale-[0.98] ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}
@@ -2060,6 +2074,154 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
             </motion.div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+  const [lang, setLang] = useState('en');
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
+  const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
+  const hoverTimeout = useRef<any>(null);
+  const isTranslating = useRef(false);
+  const hoverRequestId = useRef(0);
+
+  const speak = (text: string) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const translateWord = async (word: string): Promise<string | null> => {
+    try {
+      const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
+      const text = await requestAiText(prompt, false);
+      return text.trim() || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleWordMouseEnter = (word: string, e: React.MouseEvent) => {
+    const x = e.clientX;
+    const y = e.clientY;
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverTimeout.current = setTimeout(async () => {
+      if (isTranslating.current) return;
+      const clean = word.replace(/[.,!?;:"""„]/g, '').trim();
+      if (!clean) return;
+      const requestId = ++hoverRequestId.current;
+      isTranslating.current = true;
+      const translation = await translateWord(clean);
+      if (hoverRequestId.current === requestId) {
+        setHoveredWord({ word: clean, translation, x, y });
+      }
+      isTranslating.current = false;
+    }, 300);
+  };
+
+  const handleWordMouseLeave = () => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverRequestId.current += 1;
+    setHoveredWord(null);
+  };
+
+  const paragraphs = selectedTranscript
+    ? selectedTranscript.transcript.split(/\n+/).filter(p => p.trim())
+    : [];
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className={`text-3xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : 'text-gradient'}`}>
+          {isKidMode ? 'Oglądamy i Czytamy! 📺' : 'Transkrypcje'}
+        </h2>
+      </div>
+
+      <div className={`p-10 rounded-[3rem] glass space-y-6 transition-all ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : ''}`}>
+        <div className="space-y-3">
+          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 ml-1">Język transkrypcji</label>
+          <select
+            value={lang}
+            onChange={(e) => { setLang(e.target.value); setSelectedTranscript(null); }}
+            className="w-full sm:w-64 bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-brand-500 transition-all font-semibold"
+          >
+            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
+          </select>
+        </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
+      </div>
+
+      {!selectedTranscript ? (
+        <div className="text-center py-32 glass rounded-[3rem] border-2 border-dashed border-slate-200/60 dark:border-slate-800/60">
+          <Monitor className="h-16 w-16 text-slate-300 mx-auto mb-6 opacity-20" />
+          <p className="text-slate-500 font-bold text-xl">Wybierz lub zaimportuj transkrypcję powyżej</p>
+          <p className="text-slate-400 text-sm mt-2">Najedź kursorem na słowo aby zobaczyć tłumaczenie</p>
+        </div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className={`p-8 rounded-[2.5rem] border shadow-2xl glass ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Transkrypcja</p>
+                <h3 className="text-2xl font-black tracking-tight">{selectedTranscript.title}</h3>
+              </div>
+              <button
+                onClick={() => speak(selectedTranscript.transcript)}
+                title="Odczytaj całą transkrypcję"
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all shadow-lg ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
+              >
+                <span className="text-lg">🔊</span>
+                Odczytaj
+              </button>
+            </div>
+
+            <div className="relative">
+              <div className="leading-relaxed text-lg font-medium space-y-4">
+                {paragraphs.map((para, pi) => (
+                  <p key={pi}>
+                    {para.split(' ').map((word, wi) => (
+                      <span
+                        key={wi}
+                        className="hover:text-brand-500 cursor-pointer transition-colors inline-block mr-1.5 mb-1"
+                        onClick={() => speak(word.replace(/[.,!?;:"""„]/g, ''))}
+                        onMouseEnter={(e) => handleWordMouseEnter(word, e)}
+                        onMouseLeave={handleWordMouseLeave}
+                      >
+                        {word}
+                      </span>
+                    ))}
+                  </p>
+                ))}
+              </div>
+
+              <AnimatePresence>
+                {hoveredWord && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                    style={{ position: 'fixed', left: hoveredWord.x, top: hoveredWord.y - 50 }}
+                    className="z-50 glass bg-slate-900/90 text-white px-5 py-2.5 rounded-2xl shadow-2xl text-base font-black tracking-tight pointer-events-none border border-white/20"
+                  >
+                    {hoveredWord.translation || '...'}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <p className="mt-6 text-xs text-slate-400 font-medium">
+              Kliknij słowo aby je usłyszeć · Najedź kursorem aby zobaczyć tłumaczenie
+            </p>
+          </div>
+        </motion.div>
       )}
     </div>
   );

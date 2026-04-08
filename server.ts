@@ -46,7 +46,24 @@ async function fetchYouTubeTranscript(url: string): Promise<{ title: string; tra
   const transcript = typeof data.content === "string" ? data.content.trim() : "";
   if (!transcript) throw new Error("Brak transkrypcji dla tego filmu");
 
-  return { title: `YouTube ${videoId}`, transcript, videoId };
+  let title = `YouTube ${videoId}`;
+  try {
+    const oembedResp = await fetchWithTimeout(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+      {},
+      5000
+    );
+    if (oembedResp.ok) {
+      const oembedData = await oembedResp.json() as any;
+      if (typeof oembedData?.title === "string" && oembedData.title.trim()) {
+        title = oembedData.title.trim();
+      }
+    }
+  } catch {
+    // oEmbed is best-effort; fall back to videoId title
+  }
+
+  return { title, transcript, videoId };
 }
 
 function resolvePrompt(body: any): string {
