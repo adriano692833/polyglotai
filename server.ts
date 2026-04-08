@@ -55,7 +55,7 @@ async function startServer() {
       });
       const data = await response.json() as any;
       console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
-      if (!response.ok) throw new Error(data.error?.message || JSON.stringify(data));
+      if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
       res.json({ text: data.choices[0].message.content });
     } catch (error) {
       console.error("AI Error:", error);
