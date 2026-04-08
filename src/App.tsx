@@ -6,6 +6,34 @@ import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from
 
 // --- COMPONENTS ---
 async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const res = await fetch('/api/ai/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, isJson }),
+      signal: controller.signal,
+    });
+
+    const response = await res.json();
+    if (!res.ok) {
+      throw new Error(response?.error || 'Błąd komunikacji z AI');
+    }
+
+    if (typeof response?.text !== 'string') {
+      throw new Error('Niepoprawna odpowiedź AI');
+    }
+
+    return response.text;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Przekroczono czas oczekiwania na odpowiedź AI');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   const res = await fetch('/api/ai/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -64,6 +92,7 @@ function TranscriptPicker({
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteGenerated, setDeleteGenerated] = useState(false);
+  const [status, setStatus] = useState<string>('');
 
   const loadSources = async () => {
     setLoading(true);
@@ -87,6 +116,7 @@ function TranscriptPicker({
   const importLink = async () => {
     if (!link.trim()) return;
     setImporting(true);
+    setStatus('Importowanie transkrypcji...');
     try {
       const res = await fetch('/api/transcripts/import', {
         method: 'POST',
@@ -100,6 +130,13 @@ function TranscriptPicker({
         const selected = list.find((s) => s.id === data.id) || null;
         onSelect(selected);
         setLink('');
+        setStatus('Transkrypcja została zaimportowana.');
+      } else {
+        setStatus(data?.error || 'Nie udało się zaimportować transkrypcji.');
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('Błąd importu transkrypcji. Sprawdź logi serwera.');
       }
     } catch (err) {
       console.error(err);
@@ -111,11 +148,16 @@ function TranscriptPicker({
   const removeSelected = async () => {
     if (!selectedId) return;
     setDeleting(true);
+    setStatus('Usuwanie transkrypcji...');
     try {
       await fetch(`/api/transcripts/${selectedId}?deleteGenerated=${deleteGenerated ? 'true' : 'false'}`, { method: 'DELETE' });
       const list = await fetchTranscriptSources(userId, lang);
       setSources(list);
       onSelect(null);
+      setStatus(deleteGenerated ? 'Usunięto źródło i powiązane dane.' : 'Usunięto tylko źródło transkrypcji.');
+    } catch (err) {
+      console.error(err);
+      setStatus('Błąd usuwania transkrypcji.');
     } catch (err) {
       console.error(err);
     } finally {
@@ -168,6 +210,7 @@ function TranscriptPicker({
         />
         Usuń też wygenerowane dane z tej transkrypcji (inaczej: usuń tylko źródło)
       </label>
+      {status && <p className="text-xs font-semibold text-brand-500">{status}</p>}
     </div>
   );
 }
@@ -1048,6 +1091,7 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [quickPrompt, setQuickPrompt] = useState('');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
     fetch(`/api/flashcards?userId=${user.id}`)
@@ -1062,6 +1106,7 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
 
   const generate = async () => {
     setGenerating(true);
+    setStatusMessage('Generowanie fiszek...');
     try {
       const transcriptContext = selectedTranscript
         ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
@@ -1081,14 +1126,19 @@ Zwróć WYŁĄCZNIE JSON (tablica):
         body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
       });
       const data = await saveRes.json();
-      if (data.flashcards && Array.isArray(data.flashcards)) {
+      if (!saveRes.ok) {
+        setStatusMessage(data?.error || 'Nie udało się zapisać fiszek.');
+      } else if (data.flashcards && Array.isArray(data.flashcards)) {
         setCards([...data.flashcards, ...cards]);
         setTopic('');
+        setStatusMessage(`Dodano ${data.flashcards.length} nowych fiszek.`);
       } else {
         console.error("Invalid flashcards data:", data);
+        setStatusMessage('AI zwróciło niepoprawne dane fiszek.');
       }
     } catch (err) {
       console.error(err);
+      setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
     } finally {
       setGenerating(false);
     }
@@ -1097,6 +1147,7 @@ Zwróć WYŁĄCZNIE JSON (tablica):
   const generateOnDemand = async () => {
     if (!quickPrompt.trim()) return;
     setQuickGenerating(true);
+    setStatusMessage('Generowanie fiszek na zawołanie...');
     try {
       const transcriptContext = selectedTranscript
         ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
@@ -1118,6 +1169,16 @@ Zwróć WYŁĄCZNIE JSON (tablica):
         body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
       });
       const data = await saveRes.json();
+      if (!saveRes.ok) {
+        setStatusMessage(data?.error || 'Nie udało się zapisać fiszek.');
+      } else if (Array.isArray(data.flashcards)) {
+        setCards([...data.flashcards, ...cards]);
+        setQuickPrompt('');
+        setStatusMessage(`Dodano ${data.flashcards.length} fiszki z polecenia.`);
+      }
+    } catch (err) {
+      console.error(err);
+      setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
       if (Array.isArray(data.flashcards)) {
         setCards([...data.flashcards, ...cards]);
         setQuickPrompt('');
@@ -1180,6 +1241,7 @@ Zwróć WYŁĄCZNIE JSON (tablica):
           </div>
         </div>
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
+        {statusMessage && <p className="mt-4 text-sm font-bold text-brand-500">{statusMessage}</p>}
       </div>
 
       {loading ? (
