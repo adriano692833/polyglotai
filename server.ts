@@ -40,7 +40,7 @@ async function startServer() {
       const { prompt, isJson } = req.body;
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.0-flash",
         contents: prompt,
         config: isJson ? { responseMimeType: "application/json" } : undefined
       });
