@@ -13,18 +13,32 @@ const getVideoId = require("get-video-id").default ?? require("get-video-id");
 dotenv.config();
 
 function stripMarkdownJson(text: string): string {
-  // 1. Remove <think>...</think> blocks (reasoning/thinking models)
-  let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  // 1. Remove <think>...</think> blocks (reasoning models like liquid, deepseek-r1, qwq)
+  let s = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-  // 2. Extract content from ```json ... ``` or ``` ... ``` blocks
-  const fenced = result.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (fenced) return fenced[1].trim();
+  // 2. Extract from ```json ... ``` or ``` ... ``` fences
+  const fenced = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenced) s = fenced[1].trim();
 
-  // 3. Try to extract a bare JSON array or object from remaining text
-  const jsonMatch = result.match(/([\[{][\s\S]*[\]}])/);
-  if (jsonMatch) return jsonMatch[1].trim();
+  // 3. Scan for the first JSON array '[' or object '{' and slice to last matching bracket.
+  //    This handles models that prepend/append prose around the JSON.
+  const arrIdx = s.indexOf('[');
+  const objIdx = s.indexOf('{');
+  let start = -1;
+  let endChar = '';
 
-  return result;
+  if (arrIdx !== -1 && (objIdx === -1 || arrIdx < objIdx)) {
+    start = arrIdx; endChar = ']';
+  } else if (objIdx !== -1) {
+    start = objIdx; endChar = '}';
+  }
+
+  if (start !== -1) {
+    const end = s.lastIndexOf(endChar);
+    if (end > start) return s.slice(start, end + 1);
+  }
+
+  return s;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30000) {
