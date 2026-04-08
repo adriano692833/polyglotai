@@ -37,6 +37,9 @@ async function startServer() {
   app.post("/api/ai/generate", async (req, res) => {
     try {
       const { prompt, isJson } = req.body;
+      const model = process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free";
+      console.log(`[AI] model=${model} isJson=${isJson} prompt=${String(prompt).slice(0, 100)}...`);
+
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -45,13 +48,14 @@ async function startServer() {
           "HTTP-Referer": process.env.APP_URL || "https://polyglotai.onrender.com",
         },
         body: JSON.stringify({
-          model: process.env.OPENROUTER_MODEL || "google/gemini-2.0-flash-exp:free",
+          model,
           messages: [{ role: "user", content: prompt }],
           ...(isJson && { response_format: { type: "json_object" } }),
         }),
       });
       const data = await response.json() as any;
-      if (!response.ok) throw new Error(data.error?.message || "AI error");
+      console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
+      if (!response.ok) throw new Error(data.error?.message || JSON.stringify(data));
       res.json({ text: data.choices[0].message.content });
     } catch (error) {
       console.error("AI Error:", error);
