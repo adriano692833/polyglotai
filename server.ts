@@ -13,6 +13,66 @@ function stripMarkdownJson(text: string): string {
   return match ? match[1].trim() : text.trim();
 }
 
+function extractYouTubeVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.replace("/", "").trim() || null;
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      return parsed.searchParams.get("v");
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchYouTubeTranscript(url: string): Promise<{ title: string; transcript: string; videoId: string }> {
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) throw new Error("Nieprawidłowy link YouTube");
+
+  const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+  if (!watchRes.ok) throw new Error("Nie udało się pobrać strony filmu");
+  const watchHtml = await watchRes.text();
+
+  const titleMatch = watchHtml.match(/<title>(.*?)<\/title>/i);
+  const title = (titleMatch?.[1] || `YouTube ${videoId}`).replace(" - YouTube", "").trim();
+
+  const captionMatch = watchHtml.match(/"captionTracks":(\[.*?\])/);
+  if (!captionMatch) throw new Error("Brak napisów dla tego filmu");
+
+  const captionTracks = JSON.parse(captionMatch[1]) as any[];
+  const preferredTrack =
+    captionTracks.find((track) => track.languageCode?.startsWith("en")) ||
+    captionTracks.find((track) => track.languageCode?.startsWith("pl")) ||
+    captionTracks[0];
+
+  if (!preferredTrack?.baseUrl) throw new Error("Nie znaleziono ścieżki napisów");
+
+  const captionsRes = await fetch(preferredTrack.baseUrl);
+  if (!captionsRes.ok) throw new Error("Nie udało się pobrać napisów");
+  const captionsXml = await captionsRes.text();
+
+  const transcript = captionsXml
+    .replace(/<\/*transcript>/g, "")
+    .split(/<\/text>/)
+    .map((chunk) => chunk.replace(/<text[^>]*>/, "").trim())
+    .filter(Boolean)
+    .map((line) =>
+      line
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, "\"")
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+    )
+    .join(" ");
+
+  if (!transcript.trim()) throw new Error("Napisy są puste");
+  return { title, transcript, videoId };
+}
+
 function resolvePrompt(body: any): string {
   if (typeof body?.prompt === "string" && body.prompt.trim()) {
     return body.prompt.trim();
@@ -90,6 +150,73 @@ async function startServer() {
     }
   });
 
+  // Transcript sources: List
+  app.get("/api/transcripts", async (req, res) => {
+    try {
+      const { userId, lang } = req.query;
+      if (!userId) return res.status(400).json({ error: "Brak userId" });
+      const transcripts = await prisma.transcriptSource.findMany({
+        where: {
+          userId: String(userId),
+          lang: lang ? String(lang) : undefined,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      res.json(transcripts);
+    } catch (error) {
+      res.status(500).json({ error: "Błąd pobierania transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Import from URL
+  app.post("/api/transcripts/import", async (req, res) => {
+    try {
+      const { userId, url, lang } = req.body;
+      if (!userId || !url) return res.status(400).json({ error: "Brak danych wejściowych" });
+      const { title, transcript, videoId } = await fetchYouTubeTranscript(String(url));
+
+      const existing = await prisma.transcriptSource.findFirst({
+        where: {
+          userId: String(userId),
+          url: String(url),
+        },
+      });
+
+      if (existing) return res.json(existing);
+
+      const created = await prisma.transcriptSource.create({
+        data: {
+          userId: String(userId),
+          url: String(url),
+          videoId,
+          title,
+          transcript,
+          lang: lang || "en",
+        },
+      });
+      res.json(created);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Błąd importu transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Delete
+  app.delete("/api/transcripts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleteGenerated = String(req.query.deleteGenerated || "false") === "true";
+      if (deleteGenerated) {
+        await prisma.flashcard.deleteMany({
+          where: { transcriptSourceId: id },
+        });
+      }
+      await prisma.transcriptSource.delete({ where: { id } });
+      res.json({ success: true, deleteGenerated });
+    } catch (error) {
+      res.status(500).json({ error: "Błąd usuwania transkrypcji" });
+    }
+  });
+
   // Practice: Save Result
   app.post("/api/practice/save", async (req, res) => {
     try {
@@ -135,7 +262,7 @@ async function startServer() {
   // Flashcards: Save Generated
   app.post("/api/flashcards/save", async (req, res) => {
     try {
-      const { userId, lang, cards } = req.body;
+      const { userId, lang, cards, transcriptSourceId } = req.body;
       
       const savedCards = await Promise.all(cards.map((c: any) => 
         prisma.flashcard.create({
@@ -145,6 +272,7 @@ async function startServer() {
             front: c.front,
             back: c.back,
             status: "new",
+            transcriptSourceId: transcriptSourceId || null,
           }
         })
       ));

@@ -32,6 +32,146 @@ function parseAiJson<T>(text: string, fallback: T): T {
   }
 }
 
+type TranscriptSource = {
+  id: string;
+  title: string;
+  url: string;
+  transcript: string;
+  lang: string;
+};
+
+async function fetchTranscriptSources(userId: string, lang: string): Promise<TranscriptSource[]> {
+  const res = await fetch(`/api/transcripts?userId=${encodeURIComponent(userId)}&lang=${encodeURIComponent(lang)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+function TranscriptPicker({
+  userId,
+  lang,
+  selectedId,
+  onSelect
+}: {
+  userId: string;
+  lang: string;
+  selectedId: string | null;
+  onSelect: (source: TranscriptSource | null) => void;
+}) {
+  const [sources, setSources] = useState<TranscriptSource[]>([]);
+  const [link, setLink] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteGenerated, setDeleteGenerated] = useState(false);
+
+  const loadSources = async () => {
+    setLoading(true);
+    try {
+      const list = await fetchTranscriptSources(userId, lang);
+      setSources(list);
+      if (selectedId) {
+        const selected = list.find((s) => s.id === selectedId) || null;
+        if (!selected) onSelect(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, lang]);
+
+  const importLink = async () => {
+    if (!link.trim()) return;
+    setImporting(true);
+    try {
+      const res = await fetch('/api/transcripts/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, url: link.trim(), lang }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.id) {
+        const list = await fetchTranscriptSources(userId, lang);
+        setSources(list);
+        const selected = list.find((s) => s.id === data.id) || null;
+        onSelect(selected);
+        setLink('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const removeSelected = async () => {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/transcripts/${selectedId}?deleteGenerated=${deleteGenerated ? 'true' : 'false'}`, { method: 'DELETE' });
+      const list = await fetchTranscriptSources(userId, lang);
+      setSources(list);
+      onSelect(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 p-5 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/20 dark:border-white/5">
+      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Transkrypcje (YouTube)</label>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="Wklej link do YouTube i kliknij Importuj"
+          className="flex-1 bg-white/70 dark:bg-slate-950/50 border border-white/20 dark:border-white/5 rounded-xl px-4 py-2.5 outline-none text-sm font-semibold"
+        />
+        <button
+          onClick={importLink}
+          disabled={importing || !link.trim()}
+          className="px-4 py-2.5 rounded-xl text-sm font-black brand-gradient text-white disabled:opacity-50"
+        >
+          {importing ? 'Import...' : 'Importuj'}
+        </button>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <select
+          value={selectedId || ''}
+          onChange={(e) => onSelect(sources.find((s) => s.id === e.target.value) || null)}
+          className="flex-1 bg-white/70 dark:bg-slate-950/50 border border-white/20 dark:border-white/5 rounded-xl px-4 py-2.5 outline-none text-sm font-semibold"
+        >
+          <option value="">{loading ? 'Ładowanie...' : 'Bez transkrypcji'}</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
+        <button
+          onClick={removeSelected}
+          disabled={!selectedId || deleting}
+          className="px-4 py-2.5 rounded-xl text-sm font-black bg-red-500 text-white disabled:opacity-40"
+        >
+          {deleting ? 'Usuwam...' : 'Usuń'}
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <input
+          type="checkbox"
+          checked={deleteGenerated}
+          onChange={(e) => setDeleteGenerated(e.target.checked)}
+        />
+        Usuń też wygenerowane dane z tej transkrypcji (inaczej: usuń tylko źródło)
+      </label>
+    </div>
+  );
+}
+
 function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange: (v: string) => void, isKidMode: boolean }) {
   const [isCustom, setIsCustom] = useState(false);
 
@@ -907,6 +1047,7 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const [lang, setLang] = useState('en');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [quickPrompt, setQuickPrompt] = useState('');
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
 
   useEffect(() => {
     fetch(`/api/flashcards?userId=${user.id}`)
@@ -922,7 +1063,11 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const generate = async () => {
     setGenerating(true);
     try {
+      const transcriptContext = selectedTranscript
+        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
+        : '';
       const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.
+${transcriptContext}
 Zwróć WYŁĄCZNIE JSON (tablica):
 [
   { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
@@ -933,7 +1078,7 @@ Zwróć WYŁĄCZNIE JSON (tablica):
       const saveRes = await fetch('/api/flashcards/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, lang, cards: cardsData }),
+        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
       });
       const data = await saveRes.json();
       if (data.flashcards && Array.isArray(data.flashcards)) {
@@ -953,8 +1098,12 @@ Zwróć WYŁĄCZNIE JSON (tablica):
     if (!quickPrompt.trim()) return;
     setQuickGenerating(true);
     try {
+      const transcriptContext = selectedTranscript
+        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
+        : '';
       const prompt = `Na podstawie polecenia użytkownika wygeneruj 3 fiszki do nauki języka ${lang}.
 Polecenie użytkownika: "${quickPrompt}".
+${transcriptContext}
 Zwróć WYŁĄCZNIE JSON (tablica):
 [
   { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
@@ -966,7 +1115,7 @@ Zwróć WYŁĄCZNIE JSON (tablica):
       const saveRes = await fetch('/api/flashcards/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, lang, cards: cardsData }),
+        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
       });
       const data = await saveRes.json();
       if (Array.isArray(data.flashcards)) {
@@ -1006,6 +1155,12 @@ Zwróć WYŁĄCZNIE JSON (tablica):
       </div>
 
       <div className="glass rounded-[2.5rem] p-10 border border-white/20 dark:border-white/5 shadow-2xl">
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
         <div className="mb-8 space-y-3">
           <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Generuj na zawołanie</label>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -1343,6 +1498,7 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const [result, setResult] = useState<any>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
   const [expandedSentences, setExpandedSentences] = useState<Record<number, boolean>>({});
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const hoverTimeout = useRef<any>(null);
   const isTranslating = useRef<boolean>(false);
   const hoverRequestId = useRef(0);
@@ -1407,10 +1563,14 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
     setGenerating(true);
     setExpandedSentences({});
     try {
+      const transcriptContext = selectedTranscript
+        ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
+        : '';
       const prompt = `Jesteś nauczycielem języka. Stwórz tekst do czytania w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'dowolny ciekawy temat'}.
 Liczba zdań: ${sentenceCount}.
+${transcriptContext}
 Zwróć wynik WYŁĄCZNIE jako JSON:
 {
   "title": "tytuł tekstu",
@@ -1464,6 +1624,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
             </select>
           </div>
         </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
         <button 
           onClick={generate}
@@ -1599,13 +1765,18 @@ function Sentences({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
   const [generating, setGenerating] = useState(false);
   const [sentences, setSentences] = useState<any[]>([]);
   const [showTranslations, setShowTranslations] = useState(true);
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
 
   const generate = async () => {
     setGenerating(true);
     try {
+      const transcriptContext = selectedTranscript
+        ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
+        : '';
       const prompt = `Jesteś nauczycielem języka. Stwórz 10 ciekawych zdań w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'codzienne sytuacje'}.
+${transcriptContext}
 Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
 [
   {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
@@ -1646,6 +1817,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
             {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
           </select>
         </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
         <button 
           onClick={generate}
