@@ -13,6 +13,83 @@ function stripMarkdownJson(text: string): string {
   return match ? match[1].trim() : text.trim();
 }
 
+function extractYouTubeVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) {
+      return parsed.pathname.replace("/", "").trim() || null;
+    }
+    if (parsed.hostname.includes("youtube.com")) {
+      return parsed.searchParams.get("v");
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchYouTubeTranscript(url: string): Promise<{ title: string; transcript: string; videoId: string }> {
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) throw new Error("Nieprawidłowy link YouTube");
+
+  const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+  if (!watchRes.ok) throw new Error("Nie udało się pobrać strony filmu");
+  const watchHtml = await watchRes.text();
+
+  const titleMatch = watchHtml.match(/<title>(.*?)<\/title>/i);
+  const title = (titleMatch?.[1] || `YouTube ${videoId}`).replace(" - YouTube", "").trim();
+
+  const captionMatch = watchHtml.match(/"captionTracks":(\[.*?\])/);
+  if (!captionMatch) throw new Error("Brak napisów dla tego filmu");
+
+  const captionTracks = JSON.parse(captionMatch[1]) as any[];
+  const preferredTrack =
+    captionTracks.find((track) => track.languageCode?.startsWith("en")) ||
+    captionTracks.find((track) => track.languageCode?.startsWith("pl")) ||
+    captionTracks[0];
+
+  if (!preferredTrack?.baseUrl) throw new Error("Nie znaleziono ścieżki napisów");
+
+  const captionsRes = await fetch(preferredTrack.baseUrl);
+  if (!captionsRes.ok) throw new Error("Nie udało się pobrać napisów");
+  const captionsXml = await captionsRes.text();
+
+  const transcript = captionsXml
+    .replace(/<\/*transcript>/g, "")
+    .split(/<\/text>/)
+    .map((chunk) => chunk.replace(/<text[^>]*>/, "").trim())
+    .filter(Boolean)
+    .map((line) =>
+      line
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, "\"")
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+    )
+    .join(" ");
+
+  if (!transcript.trim()) throw new Error("Napisy są puste");
+  return { title, transcript, videoId };
+}
+
+function resolvePrompt(body: any): string {
+  if (typeof body?.prompt === "string" && body.prompt.trim()) {
+    return body.prompt.trim();
+  }
+
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const firstUserMessage = messages.find(
+    (msg: any) => msg?.role === "user" && typeof msg?.content === "string" && msg.content.trim()
+  );
+
+  if (firstUserMessage) {
+    return firstUserMessage.content.trim();
+  }
+
+  return "";
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -41,9 +118,13 @@ async function startServer() {
   // AI Proxy
   app.post("/api/ai/generate", async (req, res) => {
     try {
-      const { prompt, isJson } = req.body;
+      const { isJson } = req.body;
+      const prompt = resolvePrompt(req.body);
+      if (!prompt) {
+        return res.status(400).json({ error: "Brak promptu do wygenerowania odpowiedzi AI" });
+      }
       const model = process.env.OPENROUTER_MODEL || "openrouter/free";
-      console.log(`[AI] model=${model} isJson=${isJson} prompt=${String(prompt).slice(0, 100)}...`);
+      console.log(`[AI] model=${model} isJson=${isJson} prompt=${prompt.slice(0, 100)}...`);
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -58,12 +139,81 @@ async function startServer() {
       });
       const data = await response.json() as any;
       console.log(`[AI] status=${response.status} data=${JSON.stringify(data).slice(0, 300)}`);
-      if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
+      if (!response.ok || data.error) {
+        return res.status(response.status || 500).json({ error: data.error?.message || "AI error" });
+      }
       const rawText = data.choices[0].message.content;
       res.json({ text: isJson ? stripMarkdownJson(rawText) : rawText });
     } catch (error) {
       console.error("AI Error:", error);
       res.status(500).json({ error: "Błąd generowania AI" });
+    }
+  });
+
+  // Transcript sources: List
+  app.get("/api/transcripts", async (req, res) => {
+    try {
+      const { userId, lang } = req.query;
+      if (!userId) return res.status(400).json({ error: "Brak userId" });
+      const transcripts = await prisma.transcriptSource.findMany({
+        where: {
+          userId: String(userId),
+          lang: lang ? String(lang) : undefined,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      res.json(transcripts);
+    } catch (error) {
+      res.status(500).json({ error: "Błąd pobierania transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Import from URL
+  app.post("/api/transcripts/import", async (req, res) => {
+    try {
+      const { userId, url, lang } = req.body;
+      if (!userId || !url) return res.status(400).json({ error: "Brak danych wejściowych" });
+      const { title, transcript, videoId } = await fetchYouTubeTranscript(String(url));
+
+      const existing = await prisma.transcriptSource.findFirst({
+        where: {
+          userId: String(userId),
+          url: String(url),
+        },
+      });
+
+      if (existing) return res.json(existing);
+
+      const created = await prisma.transcriptSource.create({
+        data: {
+          userId: String(userId),
+          url: String(url),
+          videoId,
+          title,
+          transcript,
+          lang: lang || "en",
+        },
+      });
+      res.json(created);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Błąd importu transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Delete
+  app.delete("/api/transcripts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleteGenerated = String(req.query.deleteGenerated || "false") === "true";
+      if (deleteGenerated) {
+        await prisma.flashcard.deleteMany({
+          where: { transcriptSourceId: id },
+        });
+      }
+      await prisma.transcriptSource.delete({ where: { id } });
+      res.json({ success: true, deleteGenerated });
+    } catch (error) {
+      res.status(500).json({ error: "Błąd usuwania transkrypcji" });
     }
   });
 
@@ -112,7 +262,7 @@ async function startServer() {
   // Flashcards: Save Generated
   app.post("/api/flashcards/save", async (req, res) => {
     try {
-      const { userId, lang, cards } = req.body;
+      const { userId, lang, cards, transcriptSourceId } = req.body;
       
       const savedCards = await Promise.all(cards.map((c: any) => 
         prisma.flashcard.create({
@@ -122,6 +272,7 @@ async function startServer() {
             front: c.front,
             back: c.back,
             status: "new",
+            transcriptSourceId: transcriptSourceId || null,
           }
         })
       ));

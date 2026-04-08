@@ -5,6 +5,172 @@ import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
 
 // --- COMPONENTS ---
+async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
+  const res = await fetch('/api/ai/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, isJson })
+  });
+
+  const response = await res.json();
+  if (!res.ok) {
+    throw new Error(response?.error || 'Błąd komunikacji z AI');
+  }
+
+  if (typeof response?.text !== 'string') {
+    throw new Error('Niepoprawna odpowiedź AI');
+  }
+
+  return response.text;
+}
+
+function parseAiJson<T>(text: string, fallback: T): T {
+  try {
+    return JSON.parse(text || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+type TranscriptSource = {
+  id: string;
+  title: string;
+  url: string;
+  transcript: string;
+  lang: string;
+};
+
+async function fetchTranscriptSources(userId: string, lang: string): Promise<TranscriptSource[]> {
+  const res = await fetch(`/api/transcripts?userId=${encodeURIComponent(userId)}&lang=${encodeURIComponent(lang)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+function TranscriptPicker({
+  userId,
+  lang,
+  selectedId,
+  onSelect
+}: {
+  userId: string;
+  lang: string;
+  selectedId: string | null;
+  onSelect: (source: TranscriptSource | null) => void;
+}) {
+  const [sources, setSources] = useState<TranscriptSource[]>([]);
+  const [link, setLink] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteGenerated, setDeleteGenerated] = useState(false);
+
+  const loadSources = async () => {
+    setLoading(true);
+    try {
+      const list = await fetchTranscriptSources(userId, lang);
+      setSources(list);
+      if (selectedId) {
+        const selected = list.find((s) => s.id === selectedId) || null;
+        if (!selected) onSelect(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, lang]);
+
+  const importLink = async () => {
+    if (!link.trim()) return;
+    setImporting(true);
+    try {
+      const res = await fetch('/api/transcripts/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, url: link.trim(), lang }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.id) {
+        const list = await fetchTranscriptSources(userId, lang);
+        setSources(list);
+        const selected = list.find((s) => s.id === data.id) || null;
+        onSelect(selected);
+        setLink('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const removeSelected = async () => {
+    if (!selectedId) return;
+    setDeleting(true);
+    try {
+      await fetch(`/api/transcripts/${selectedId}?deleteGenerated=${deleteGenerated ? 'true' : 'false'}`, { method: 'DELETE' });
+      const list = await fetchTranscriptSources(userId, lang);
+      setSources(list);
+      onSelect(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 p-5 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/20 dark:border-white/5">
+      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Transkrypcje (YouTube)</label>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          placeholder="Wklej link do YouTube i kliknij Importuj"
+          className="flex-1 bg-white/70 dark:bg-slate-950/50 border border-white/20 dark:border-white/5 rounded-xl px-4 py-2.5 outline-none text-sm font-semibold"
+        />
+        <button
+          onClick={importLink}
+          disabled={importing || !link.trim()}
+          className="px-4 py-2.5 rounded-xl text-sm font-black brand-gradient text-white disabled:opacity-50"
+        >
+          {importing ? 'Import...' : 'Importuj'}
+        </button>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <select
+          value={selectedId || ''}
+          onChange={(e) => onSelect(sources.find((s) => s.id === e.target.value) || null)}
+          className="flex-1 bg-white/70 dark:bg-slate-950/50 border border-white/20 dark:border-white/5 rounded-xl px-4 py-2.5 outline-none text-sm font-semibold"
+        >
+          <option value="">{loading ? 'Ładowanie...' : 'Bez transkrypcji'}</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.id}>{s.title}</option>
+          ))}
+        </select>
+        <button
+          onClick={removeSelected}
+          disabled={!selectedId || deleting}
+          className="px-4 py-2.5 rounded-xl text-sm font-black bg-red-500 text-white disabled:opacity-40"
+        >
+          {deleting ? 'Usuwam...' : 'Usuń'}
+        </button>
+      </div>
+      <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <input
+          type="checkbox"
+          checked={deleteGenerated}
+          onChange={(e) => setDeleteGenerated(e.target.checked)}
+        />
+        Usuń też wygenerowane dane z tej transkrypcji (inaczej: usuń tylko źródło)
+      </label>
+    </div>
+  );
+}
 
 function TopicSelector({ value, onChange, isKidMode }: { value: string, onChange: (v: string) => void, isKidMode: boolean }) {
   const [isCustom, setIsCustom] = useState(false);
@@ -626,14 +792,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
 }
 Tekst ucznia: "${text}"`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const resultData = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const resultData = parseAiJson<any>(aiText, { corrected: '', score: 0, mistakes: [], praise: '', tip: '' });
       setResult(resultData);
 
       // Save to DB
@@ -716,7 +876,7 @@ Tekst ucznia: "${text}"`;
               <p className="text-2xl leading-relaxed font-bold tracking-tight">{result.corrected}</p>
             </div>
 
-            {result.mistakes.length > 0 && (
+            {Array.isArray(result.mistakes) && result.mistakes.length > 0 && (
               <div className="grid gap-4">
                 <h4 className={`text-xs font-black px-4 uppercase tracking-[0.2em] ${isKidMode ? 'text-purple-400' : 'text-slate-400'}`}>
                   {isKidMode ? "Małe poprawki:" : "Znalezione błędy:"}
@@ -761,14 +921,15 @@ function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boo
     setResult(null);
     setUserAnswer('');
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const prompt = `Jesteś nauczycielem języka. Przygotuj zadanie tłumaczeniowe.
+Język docelowy: ${lang}. Poziom: ${level}. Temat: ${topic || 'codzienne sytuacje'}.
+Zwróć WYŁĄCZNIE JSON:
+{
+  "polish": "jedno zdanie po polsku do przetłumaczenia",
+  "hint": "krótka wskazówka po polsku"
+}`;
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setCurrentTask(data);
     } catch (err) {
       console.error(err);
@@ -781,14 +942,19 @@ function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boo
     if (!userAnswer.trim()) return;
     setChecking(true);
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const prompt = `Oceń tłumaczenie ucznia.
+Język docelowy: ${lang}
+Zdanie bazowe po polsku: "${currentTask?.polish || ''}"
+Odpowiedź ucznia: "${userAnswer}"
+Poziom: ${level}
+Zwróć WYŁĄCZNIE JSON:
+{
+  "score": 0,
+  "feedback": "krótki feedback po polsku",
+  "correction": "poprawna wersja odpowiedzi ucznia w języku docelowym"
+}`;
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -876,9 +1042,12 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const [cards, setCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [quickGenerating, setQuickGenerating] = useState(false);
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [lang, setLang] = useState('en');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
+  const [quickPrompt, setQuickPrompt] = useState('');
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
 
   useEffect(() => {
     fetch(`/api/flashcards?userId=${user.id}`)
@@ -894,19 +1063,22 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   const generate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const cardsData = JSON.parse(response.text || "[]");
+      const transcriptContext = selectedTranscript
+        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
+        : '';
+      const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.
+${transcriptContext}
+Zwróć WYŁĄCZNIE JSON (tablica):
+[
+  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
+]`;
+      const aiText = await requestAiText(prompt, true);
+      const cardsData = parseAiJson<any[]>(aiText, []);
 
       const saveRes = await fetch('/api/flashcards/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, lang, cards: cardsData }),
+        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
       });
       const data = await saveRes.json();
       if (data.flashcards && Array.isArray(data.flashcards)) {
@@ -919,6 +1091,41 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
       console.error(err);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const generateOnDemand = async () => {
+    if (!quickPrompt.trim()) return;
+    setQuickGenerating(true);
+    try {
+      const transcriptContext = selectedTranscript
+        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
+        : '';
+      const prompt = `Na podstawie polecenia użytkownika wygeneruj 3 fiszki do nauki języka ${lang}.
+Polecenie użytkownika: "${quickPrompt}".
+${transcriptContext}
+Zwróć WYŁĄCZNIE JSON (tablica):
+[
+  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
+]`;
+      const aiText = await requestAiText(prompt, true);
+      const cardsData = parseAiJson<any[]>(aiText, []).filter((c: any) => c?.front && c?.back);
+      if (!cardsData.length) return;
+
+      const saveRes = await fetch('/api/flashcards/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
+      });
+      const data = await saveRes.json();
+      if (Array.isArray(data.flashcards)) {
+        setCards([...data.flashcards, ...cards]);
+        setQuickPrompt('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setQuickGenerating(false);
     }
   };
 
@@ -948,6 +1155,30 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
       </div>
 
       <div className="glass rounded-[2.5rem] p-10 border border-white/20 dark:border-white/5 shadow-2xl">
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
+        <div className="mb-8 space-y-3">
+          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Generuj na zawołanie</label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              value={quickPrompt}
+              onChange={(e) => setQuickPrompt(e.target.value)}
+              placeholder="Np. podróż pociągiem, rozmowa u lekarza, czasowniki nieregularne..."
+              className="flex-1 bg-white/50 dark:bg-slate-900/50 border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3.5 outline-none font-semibold"
+            />
+            <button
+              onClick={generateOnDemand}
+              disabled={quickGenerating || !quickPrompt.trim()}
+              className={`px-6 py-3.5 rounded-2xl font-black shadow-xl transition-all disabled:opacity-50 ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
+            >
+              {quickGenerating ? "Generuję..." : "Generuj 3 fiszki"}
+            </button>
+          </div>
+        </div>
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
       </div>
 
@@ -1150,13 +1381,7 @@ Poziom CEFR: ${level || 'none'}
 Styl: ${style || 'none'}
 Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: false })
-      });
-      const response = await res.json();
-      const translation = response.text || "";
+      const translation = await requestAiText(prompt, false);
       setTranslatedText(translation);
 
       // Save to DB
@@ -1273,8 +1498,10 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const [result, setResult] = useState<any>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
   const [expandedSentences, setExpandedSentences] = useState<Record<number, boolean>>({});
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const hoverTimeout = useRef<any>(null);
   const isTranslating = useRef<boolean>(false);
+  const hoverRequestId = useRef(0);
 
   const speak = (text: string, language: string) => {
     const utterance = new SpeechSynthesisUtterance(text);
@@ -1285,13 +1512,8 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const translateWord = async (word: string) => {
     try {
       const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: false })
-      });
-      const response = await res.json();
-      return response.text?.trim() || null;
+      const responseText = await requestAiText(prompt, false);
+      return responseText.trim() || null;
     } catch (err) {
       return null;
     }
@@ -1308,19 +1530,24 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
       
       const cleanWord = word.replace(/[.,!?;:]/g, '').trim();
       if (!cleanWord) return;
+      const requestId = ++hoverRequestId.current;
+      const normalizedWord = cleanWord.toLowerCase();
 
       // Check if word is in vocabulary first
       const vocabMatch = result?.vocabulary?.find((v: any) => 
-        v.word.toLowerCase() === cleanWord.toLowerCase() || 
-        cleanWord.toLowerCase().includes(v.word.toLowerCase())
+        typeof v?.word === 'string' && v.word.toLowerCase() === normalizedWord
       );
       
       if (vocabMatch) {
-        setHoveredWord({ word: cleanWord, translation: vocabMatch.translation, x, y });
+        if (hoverRequestId.current === requestId) {
+          setHoveredWord({ word: cleanWord, translation: vocabMatch.translation, x, y });
+        }
       } else {
         isTranslating.current = true;
         const translation = await translateWord(cleanWord);
-        setHoveredWord({ word: cleanWord, translation, x, y });
+        if (hoverRequestId.current === requestId) {
+          setHoveredWord({ word: cleanWord, translation, x, y });
+        }
         isTranslating.current = false;
       }
     }, 300);
@@ -1328,6 +1555,7 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
 
   const handleWordMouseLeave = () => {
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverRequestId.current += 1;
     setHoveredWord(null);
   };
 
@@ -1335,10 +1563,14 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
     setGenerating(true);
     setExpandedSentences({});
     try {
+      const transcriptContext = selectedTranscript
+        ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
+        : '';
       const prompt = `Jesteś nauczycielem języka. Stwórz tekst do czytania w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'dowolny ciekawy temat'}.
 Liczba zdań: ${sentenceCount}.
+${transcriptContext}
 Zwróć wynik WYŁĄCZNIE jako JSON:
 {
   "title": "tytuł tekstu",
@@ -1353,14 +1585,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   ]
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -1398,6 +1624,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
             </select>
           </div>
         </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
         <button 
           onClick={generate}
@@ -1533,26 +1765,25 @@ function Sentences({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
   const [generating, setGenerating] = useState(false);
   const [sentences, setSentences] = useState<any[]>([]);
   const [showTranslations, setShowTranslations] = useState(true);
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
 
   const generate = async () => {
     setGenerating(true);
     try {
+      const transcriptContext = selectedTranscript
+        ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
+        : '';
       const prompt = `Jesteś nauczycielem języka. Stwórz 10 ciekawych zdań w języku: ${lang}.
 Poziom: ${level}.
 Temat: ${topic || 'codzienne sytuacje'}.
+${transcriptContext}
 Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
 [
   {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
 ]`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "[]");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any[]>(aiText, []);
       setSentences(data);
     } catch (err) {
       console.error(err);
@@ -1586,6 +1817,12 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
             {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
           </select>
         </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={setSelectedTranscript}
+        />
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} />
         <button 
           onClick={generate}
@@ -1647,14 +1884,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "hints": ["podpowiedź 1", "podpowiedź 2"]
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setChallenge(data);
     } catch (err) {
       console.error(err);
@@ -1679,14 +1910,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   "correction": "poprawiona wersja tekstu"
 }`;
 
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, isJson: true })
-      });
-      const response = await res.json();
-
-      const data = JSON.parse(response.text || "{}");
+      const aiText = await requestAiText(prompt, true);
+      const data = parseAiJson<any>(aiText, {});
       setResult(data);
     } catch (err) {
       console.error(err);
