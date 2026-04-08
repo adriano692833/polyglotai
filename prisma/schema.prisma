@@ -64,8 +64,10 @@ model Flashcard {
   reviews        Int      @default(0)
   lastReview     DateTime?
   nextReview     DateTime?
+  transcriptSourceId String?
   createdAt      DateTime @default(now())
   categoryRef    FlashcardCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transcriptSourceRef TranscriptSource? @relation(fields: [transcriptSourceId], references: [id], onDelete: SetNull)
 }
 
 model UserPoints {
@@ -107,4 +109,18 @@ model DailyChallenge {
   prompt    String
   level     String   @default("b1")
   createdAt DateTime @default(now())
+}
+
+model TranscriptSource {
+  id         String   @id @default(cuid())
+  userId     String
+  url        String
+  videoId    String
+  title      String
+  transcript String
+  lang       String   @default("en")
+  createdAt  DateTime @default(now())
+  flashcards Flashcard[]
+
+  @@unique([userId, url])
 }
