@@ -13,8 +13,18 @@ const getVideoId = require("get-video-id").default ?? require("get-video-id");
 dotenv.config();
 
 function stripMarkdownJson(text: string): string {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  return match ? match[1].trim() : text.trim();
+  // 1. Remove <think>...</think> blocks (reasoning/thinking models)
+  let result = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // 2. Extract content from ```json ... ``` or ``` ... ``` blocks
+  const fenced = result.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenced) return fenced[1].trim();
+
+  // 3. Try to extract a bare JSON array or object from remaining text
+  const jsonMatch = result.match(/([\[{][\s\S]*[\]}])/);
+  if (jsonMatch) return jsonMatch[1].trim();
+
+  return result;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30000) {
