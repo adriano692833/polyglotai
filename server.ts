@@ -5,8 +5,11 @@ import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import dotenv from "dotenv";
-import { YoutubeTranscript } from "youtube-transcript";
-import getVideoId from "get-video-id";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { YoutubeTranscript } = require("youtube-transcript");
+const getVideoId = require("get-video-id").default ?? require("get-video-id");
 
 dotenv.config();
 
