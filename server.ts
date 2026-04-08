@@ -50,7 +50,6 @@ async function startServer() {
         body: JSON.stringify({
           model,
           messages: [{ role: "user", content: prompt }],
-          ...(isJson && { response_format: { type: "json_object" } }),
         }),
       });
       const data = await response.json() as any;
