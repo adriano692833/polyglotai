@@ -296,6 +296,9 @@ export default function App() {
     else localStorage.removeItem('pg_global_source');
   };
 
+  const [globalLang, setGlobalLang] = useState<string>(() => localStorage.getItem('pg_lang') || 'en');
+  useEffect(() => { localStorage.setItem('pg_lang', globalLang); }, [globalLang]);
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -466,16 +469,26 @@ export default function App() {
 
       {/* Navigation */}
       <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 pt-4 pb-2">
-        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-3 scrollbar-none">
-          <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Moje Wyniki" : "Dashboard"} isKidMode={isKidMode} />
-          <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
-          <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label={isKidMode ? "Czytanie" : "Czytanie"} isKidMode={isKidMode} />
-          <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label={isKidMode ? "Zdania" : "Zdania"} isKidMode={isKidMode} />
-          <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Zabawa Kartami" : "Fiszki"} isKidMode={isKidMode} />
-          <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label={isKidMode ? "Słówka" : "Słówka"} isKidMode={isKidMode} />
-          <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label={isKidMode ? "Wyzwanie" : "Wyzwanie"} isKidMode={isKidMode} />
-          <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label={isKidMode ? "Tłumacz" : "Tłumacz"} isKidMode={isKidMode} />
-          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-3 scrollbar-none flex-1">
+            <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Moje Wyniki" : "Dashboard"} isKidMode={isKidMode} />
+            <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
+            <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label="Czytanie" isKidMode={isKidMode} />
+            <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label="Zdania" isKidMode={isKidMode} />
+            <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Karty" : "Fiszki"} isKidMode={isKidMode} />
+            <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label="Słówka" isKidMode={isKidMode} />
+            <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label="Wyzwanie" isKidMode={isKidMode} />
+            <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label="Tłumacz" isKidMode={isKidMode} />
+            <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
+          </div>
+          {/* Global language selector */}
+          <select
+            value={globalLang}
+            onChange={e => setGlobalLang(e.target.value)}
+            className="shrink-0 mb-3 glass border border-white/20 dark:border-white/5 rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm font-bold outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
+          </select>
         </div>
       </nav>
 
@@ -511,14 +524,14 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'dashboard' && <Dashboard user={user} isKidMode={isKidMode} />}
-            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} />}
-            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} />}
-            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} />}
-            {activeTab === 'flashcards' && <Flashcards user={user} isKidMode={isKidMode} />}
-            {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} />}
-            {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} />}
-            {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} />}
-            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} />}
+            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
+            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
+            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
+            {activeTab === 'flashcards' && <Flashcards user={user} isKidMode={isKidMode} lang={globalLang} />}
+            {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} lang={globalLang} />}
+            {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} lang={globalLang} />}
+            {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} globalLang={globalLang} />}
+            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} lang={globalLang} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -538,7 +551,8 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
   return (
     <button
       onClick={() => onClick(id)}
-      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+      title={label}
+      className={`flex items-center gap-0 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
         active
           ? isKidMode
             ? 'bg-white dark:bg-purple-900/40 shadow-md text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/40'
@@ -547,7 +561,7 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
       }`}
     >
       <span className={active ? (isKidMode ? 'text-purple-500' : 'text-brand-500') : 'opacity-60'}>{icon}</span>
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
@@ -818,7 +832,7 @@ function StatCard({ icon, label, value, subValue, barColor, progress }: any) {
   );
 }
 
-function Practice({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
+function Practice({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
   const [activeSubTab, setActiveSubTab] = useState<'write' | 'translate'>('write');
 
   return (
@@ -839,17 +853,16 @@ function Practice({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode
       </div>
 
       {activeSubTab === 'write' ? (
-        <WritePractice user={user} isKidMode={isKidMode} globalSource={globalSource} />
+        <WritePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} />
       ) : (
-        <TranslatePractice user={user} isKidMode={isKidMode} globalSource={globalSource} />
+        <TranslatePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} />
       )}
     </div>
   );
 }
 
-function WritePractice({ user, isKidMode, globalSource: _gs }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
+function WritePractice({ user, isKidMode, globalSource: _gs, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
   const [text, setText] = useState('');
-  const [lang, setLang] = useState('en');
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<any>(null);
 
@@ -902,18 +915,9 @@ Tekst ucznia: "${text}"`;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className={`text-2xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : ''}`}>
-          {isKidMode ? "Piszemy i poprawiamy! ✏️" : "Pisz i poprawiaj"}
-        </h2>
-        <select 
-          value={lang} 
-          onChange={(e) => setLang(e.target.value)}
-          className={`glass border rounded-2xl px-5 py-2.5 text-sm font-bold outline-none shadow-sm transition-all ${isKidMode ? 'border-purple-200 focus:ring-purple-400' : 'border-white/20 dark:border-white/5 focus:ring-brand-500'}`}
-        >
-          {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-        </select>
-      </div>
+      <h2 className={`text-2xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : ''}`}>
+        {isKidMode ? "Piszemy i poprawiamy! ✏️" : "Pisz i poprawiaj"}
+      </h2>
 
       <div className={`glass rounded-[2.5rem] border shadow-2xl overflow-hidden transition-all duration-500 ${isKidMode ? 'border-purple-200 ring-8 ring-purple-50/30' : 'border-white/20 dark:border-white/5'}`}>
         <textarea 
@@ -992,8 +996,7 @@ Tekst ucznia: "${text}"`;
   );
 }
 
-function TranslatePractice({ user, isKidMode, globalSource: _gs }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
-  const [lang, setLang] = useState('en');
+function TranslatePractice({ user, isKidMode, globalSource: _gs, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -1053,9 +1056,6 @@ Zwróć WYŁĄCZNIE JSON:
     <div className="space-y-8">
       <div className={`p-10 rounded-[2.5rem] border shadow-2xl space-y-8 transition-all duration-500 glass ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : 'border-white/20 dark:border-white/5'}`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
-            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-          </select>
           <select value={level} onChange={(e) => setLevel(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
             {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
           </select>
@@ -1124,7 +1124,7 @@ Zwróć WYŁĄCZNIE JSON:
   );
 }
 
-function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function Flashcards({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
   // Card data
   const [allCards, setAllCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1132,7 +1132,6 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
   // Generation controls
   const [generating, setGenerating] = useState(false);
   const [quickGenerating, setQuickGenerating] = useState(false);
-  const [lang, setLang] = useState('en');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [quickPrompt, setQuickPrompt] = useState('');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
@@ -1266,9 +1265,6 @@ function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
           {isKidMode ? "Twoje Magiczne Karty 🃏" : "Twoje Fiszki"}
         </h2>
         <div className="flex gap-3">
-          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-2.5 text-sm font-bold outline-none shadow-sm focus:ring-2 focus:ring-brand-500">
-            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-          </select>
           <button onClick={generate} disabled={generating} className={`px-8 py-3 rounded-2xl text-sm font-black shadow-2xl transition-all flex items-center gap-3 transform active:scale-95 ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}>
             {generating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             {isKidMode ? "Wyrysuj nowe karty! ✨" : "Generuj nowe"}
@@ -1412,11 +1408,10 @@ function Badge({ children, variant = 'default', className = '' }: { children: Re
   return <span className={`${base} ${variants[variant]} ${className}`}>{children}</span>;
 }
 
-function Vocabulary({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function Vocabulary({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
   const [words, setWords] = useState<any[]>([]);
   const [newWord, setNewWord] = useState('');
   const [newTrans, setNewTrans] = useState('');
-  const [lang, setLang] = useState('en');
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
 
@@ -1464,13 +1459,6 @@ function Vocabulary({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
       </div>
 
       <form onSubmit={add} className={`p-8 rounded-[2.5rem] border shadow-2xl flex flex-col lg:flex-row gap-4 transition-all duration-500 glass ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : 'border-white/20 dark:border-white/5'}`}>
-        <select 
-          value={lang} 
-          onChange={(e) => setLang(e.target.value)}
-          className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500 min-w-[140px]"
-        >
-          {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-        </select>
         <div className="flex-1 relative group">
           <input 
             className="w-full bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl px-6 py-3 outline-none font-black text-lg focus:ring-2 focus:ring-brand-500 transition-all"
@@ -1540,11 +1528,11 @@ function Vocabulary({ user, isKidMode }: { user: AuthUser, isKidMode: boolean })
     </div>
   );
 }
-function Translator({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function Translator({ user, isKidMode, globalLang }: { user: AuthUser; isKidMode: boolean; globalLang: string }) {
   const [sourceText, setSourceText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
   const [sourceLang, setSourceLang] = useState('pl');
-  const [targetLang, setTargetLang] = useState('en');
+  const [targetLang, setTargetLang] = useState(globalLang);
   const [level, setLevel] = useState('none');
   const [style, setStyle] = useState('none');
   const [loading, setLoading] = useState(false);
@@ -1667,8 +1655,7 @@ Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
   );
 }
 
-function Reading({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
-  const [lang, setLang] = useState(() => globalSource?.lang || 'en');
+function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [sentenceCount, setSentenceCount] = useState(10);
@@ -1782,13 +1769,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
       </div>
 
       <div className={`p-10 rounded-[3rem] glass space-y-8 transition-all ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : ''}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-          <div className="space-y-3">
-            <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 ml-1">Język</label>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className="w-full bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-brand-500 transition-all font-semibold">
-              {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           <div className="space-y-3">
             <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 ml-1">Poziom</label>
             <select value={level} onChange={(e) => setLevel(e.target.value)} className="w-full bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-brand-500 transition-all font-semibold">
@@ -1936,8 +1917,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function Sentences({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
-  const [lang, setLang] = useState(() => globalSource?.lang || 'en');
+function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -2023,10 +2003,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
       </div>
 
       <div className={`p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border shadow-2xl space-y-6 glass ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : 'border-white/20 dark:border-white/5'}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-4 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
-            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-          </select>
+        <div className="grid grid-cols-1 gap-4">
           <select value={level} onChange={(e) => setLevel(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-4 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
             {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
           </select>
@@ -2095,8 +2072,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
   );
 }
 
-function Challenge({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
-  const [lang, setLang] = useState('en');
+function Challenge({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -2178,9 +2154,6 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
           </div>
           <h3 className="text-3xl font-black tracking-tight">Gotowy na dzisiejsze wyzwanie?</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-xl mx-auto">
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-6 py-4 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
-              {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-            </select>
             <select value={level} onChange={(e) => setLevel(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-6 py-4 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
               {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
             </select>
@@ -2250,7 +2223,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function TranscriptHub({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
+function TranscriptHub({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
   const [mode, setMode] = useState<'read' | 'play'>('play');
   return (
     <div className="space-y-4">
@@ -2278,14 +2251,13 @@ function TranscriptHub({ user, isKidMode, onSourceChange }: { user: AuthUser; is
         </button>
       </div>
       {mode === 'play'
-        ? <VideoPlayer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} />
-        : <TranscriptViewer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} />}
+        ? <VideoPlayer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} />
+        : <TranscriptViewer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} />}
     </div>
   );
 }
 
-function TranscriptViewer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
-  const [lang, setLang] = useState('en');
+function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
   const [formatting, setFormatting] = useState(false);
@@ -2366,14 +2338,6 @@ function TranscriptViewer({ user, isKidMode, onSourceChange }: { user: AuthUser;
 
       <div className={`p-10 rounded-[3rem] glass space-y-6 transition-all ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : ''}`}>
         <div className="space-y-3">
-          <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 ml-1">Język transkrypcji</label>
-          <select
-            value={lang}
-            onChange={(e) => { setLang(e.target.value); setSelectedTranscript(null); }}
-            className="w-full sm:w-64 bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-2xl px-5 py-3.5 outline-none focus:ring-2 focus:ring-brand-500 transition-all font-semibold"
-          >
-            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-          </select>
         </div>
         <TranscriptPicker
           userId={user.id}
@@ -2470,8 +2434,7 @@ function TranscriptViewer({ user, isKidMode, onSourceChange }: { user: AuthUser;
 // ─────────────────────────────────────────────────────────────────────────────
 // Language Reactor-style Video Player tab
 // ─────────────────────────────────────────────────────────────────────────────
-function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
-  const [lang, setLang] = useState('en');
+function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [loadingSegs, setLoadingSegs] = useState(false);
@@ -2737,26 +2700,12 @@ function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKi
     <div className="space-y-6 pb-24" onClick={() => setPopup(null)}>
       {/* ── Settings bar ── */}
       <div className={`p-6 rounded-[2rem] glass space-y-4 ${isKidMode ? 'border border-purple-100/50' : ''}`}>
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-          <div className="space-y-2 shrink-0">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Język</label>
-            <select
-              value={lang}
-              onChange={e => { setLang(e.target.value); setSelectedTranscript(null); }}
-              className="bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 font-semibold text-sm"
-            >
-              {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-            </select>
-          </div>
-          <div className="flex-1">
-            <TranscriptPicker
-              userId={user.id}
-              lang={lang}
-              selectedId={selectedTranscript?.id || null}
-              onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); onSourceChange?.(t); }}
-            />
-          </div>
-        </div>
+        <TranscriptPicker
+          userId={user.id}
+          lang={lang}
+          selectedId={selectedTranscript?.id || null}
+          onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); onSourceChange?.(t); }}
+        />
       </div>
 
       {!selectedTranscript ? (
