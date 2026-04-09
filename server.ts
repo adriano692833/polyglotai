@@ -112,6 +112,22 @@ const __dirname = path.dirname(__filename);
 
 const prisma = new PrismaClient();
 
+async function callAI(prompt: string): Promise<string> {
+  const model = process.env.OPENROUTER_MODEL || "openrouter/free";
+  const response = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.APP_URL || "https://polyglotai.onrender.com",
+    },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+  }, 60000);
+  const data = await response.json() as any;
+  if (!response.ok || data.error) throw new Error(data.error?.message || "AI error");
+  return data.choices[0].message.content as string;
+}
+
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -236,6 +252,54 @@ async function startServer() {
       res.json({ success: true, deleteGenerated });
     } catch (error) {
       res.status(500).json({ error: "Błąd usuwania transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Format with AI
+  app.post("/api/transcripts/:id/format", async (req, res) => {
+    const startedAt = Date.now();
+    try {
+      const { id } = req.params;
+      const source = await prisma.transcriptSource.findUnique({ where: { id } });
+      if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
+
+      // Split into ~1400-char chunks at word boundaries to stay within free model token limits
+      const CHUNK_SIZE = 1400;
+      const raw = source.transcript.replace(/\s+/g, ' ').trim();
+      const chunks: string[] = [];
+      let pos = 0;
+      while (pos < raw.length) {
+        let end = Math.min(pos + CHUNK_SIZE, raw.length);
+        // Break at last space to avoid cutting a word
+        if (end < raw.length) {
+          const lastSpace = raw.lastIndexOf(' ', end);
+          if (lastSpace > pos) end = lastSpace;
+        }
+        chunks.push(raw.slice(pos, end).trim());
+        pos = end + 1;
+      }
+
+      console.log(`[FORMAT] id=${id} chunks=${chunks.length} rawLen=${raw.length}`);
+
+      const formatted: string[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const prompt = `Poniższy tekst to fragment transkrypcji wideo (część ${i + 1} z ${chunks.length}). Podziel go na akapity (2-4 zdania każdy), dodaj brakującą interpunkcję i popraw wielkie litery na początku zdań. Nie tłumacz, nie skracaj, nie zmieniaj słów. Zwróć TYLKO sformatowany tekst, bez komentarzy:\n\n${chunks[i]}`;
+        const result = await callAI(prompt);
+        // Strip any think tags or markdown the model might add
+        formatted.push(stripMarkdownJson(result));
+      }
+
+      const transcript = formatted.join('\n\n');
+      const updated = await prisma.transcriptSource.update({
+        where: { id },
+        data: { transcript },
+      });
+
+      console.log(`[FORMAT] done id=${id} durationMs=${Date.now() - startedAt}`);
+      res.json(updated);
+    } catch (error: any) {
+      console.error(`[FORMAT] error durationMs=${Date.now() - startedAt}`, error?.message || error);
+      res.status(500).json({ error: error?.message || "Błąd formatowania transkrypcji" });
     }
   });
 

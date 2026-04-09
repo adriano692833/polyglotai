@@ -2083,9 +2083,29 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
   const [lang, setLang] = useState('en');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
+  const [formatting, setFormatting] = useState(false);
+  const [formatStatus, setFormatStatus] = useState('');
   const hoverTimeout = useRef<any>(null);
   const isTranslating = useRef(false);
   const hoverRequestId = useRef(0);
+
+  const formatTranscript = async () => {
+    if (!selectedTranscript) return;
+    setFormatting(true);
+    const chunks = Math.ceil(selectedTranscript.transcript.replace(/\s+/g, ' ').trim().length / 1400);
+    setFormatStatus(`Formatowanie AI (${chunks} ${chunks === 1 ? 'fragment' : chunks < 5 ? 'fragmenty' : 'fragmentów'})…`);
+    try {
+      const res = await fetch(`/api/transcripts/${selectedTranscript.id}/format`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Błąd formatowania');
+      setSelectedTranscript(data);
+      setFormatStatus('Transkrypcja sformatowana.');
+    } catch (err: any) {
+      setFormatStatus(err.message || 'Błąd formatowania.');
+    } finally {
+      setFormatting(false);
+    }
+  };
 
   const speak = (text: string) => {
     window.speechSynthesis.cancel();
@@ -2173,15 +2193,31 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Transkrypcja</p>
                 <h3 className="text-2xl font-black tracking-tight">{selectedTranscript.title}</h3>
               </div>
-              <button
-                onClick={() => speak(selectedTranscript.transcript)}
-                title="Odczytaj całą transkrypcję"
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all shadow-lg ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
-              >
-                <span className="text-lg">🔊</span>
-                Odczytaj
-              </button>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={formatTranscript}
+                  disabled={formatting}
+                  title="Podziel na akapity i dodaj interpunkcję przez AI"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all shadow-lg glass border border-white/20 dark:border-white/10 hover:border-brand-500/40 disabled:opacity-50"
+                >
+                  {formatting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="text-base">✨</span>}
+                  Formatuj AI
+                </button>
+                <button
+                  onClick={() => speak(selectedTranscript.transcript)}
+                  title="Odczytaj całą transkrypcję"
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all shadow-lg ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
+                >
+                  <span className="text-lg">🔊</span>
+                  Odczytaj
+                </button>
+              </div>
             </div>
+            {formatStatus && (
+              <p className={`text-xs font-semibold mb-4 ${formatting ? 'text-brand-500 animate-pulse' : 'text-slate-400'}`}>
+                {formatStatus}
+              </p>
+            )}
 
             <div className="relative">
               <div className="leading-relaxed text-lg font-medium space-y-4">
