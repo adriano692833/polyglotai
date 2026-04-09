@@ -323,7 +323,7 @@ async function generateAndCachePLTranslations(id: string, segments: Array<{text:
   }
 }
 
-
+app.get("/api/transcripts/:id/segments", async (req, res) => {
     try {
       const { id } = req.params;
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
