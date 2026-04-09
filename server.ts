@@ -300,8 +300,30 @@ async function startServer() {
     }
   });
 
-  // Transcript sources: Timed segments (fetched from Supadata with text=false, cached in DB)
-  app.get("/api/transcripts/:id/segments", async (req, res) => {
+// Background: generate Polish translations for all segments and cache in DB.
+// Called fire-and-forget — never awaited by the HTTP response.
+async function generateAndCachePLTranslations(id: string, segments: Array<{text: string; start: number; dur: number}>) {
+  try {
+    const batch = segments.slice(0, 150);
+    const lines = batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 9000);
+    const prompt = `Przetłumacz każdą linię na polski. Zachowaj numerację. Format odpowiedzi: "N. tłumaczenie"\n\n${lines}`;
+    console.log(`[TRANS] start bg translation id=${id} segs=${batch.length}`);
+    const result = await callAI(prompt);
+    const trans: Record<number, string> = {};
+    result.split('\n').forEach(line => {
+      const m = line.match(/^(\d+)\.\s*(.+)/);
+      if (m) trans[parseInt(m[1])] = m[2].trim();
+    });
+    if (Object.keys(trans).length > 5) {
+      await prisma.transcriptSource.update({ where: { id }, data: { segTranslations: trans } });
+      console.log(`[TRANS] cached id=${id} count=${Object.keys(trans).length}`);
+    }
+  } catch (e: any) {
+    console.error(`[TRANS] bg failed id=${id}:`, e?.message || e);
+  }
+}
+
+
     try {
       const { id } = req.params;
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
@@ -331,8 +353,15 @@ async function startServer() {
             ? Number((cached[1] as any).start ?? 0) - Number((cached[0] as any).start ?? 0)
             : 0;
           if (gap <= 30) {
-            // Already in seconds — return as-is
-            return res.json({ segments: cached });
+            // Already in seconds — kick off background translation if not yet cached
+            const hasTrans = source.segTranslations && Object.keys(source.segTranslations).length > 5;
+            if (!hasTrans) {
+              generateAndCachePLTranslations(id, cached as any).catch(() => {});
+            }
+            return res.json({
+              segments: cached,
+              translations: hasTrans ? source.segTranslations : null,
+            });
           }
           console.log(`[SEGMENTS] stale ms cache id=${id} gap=${gap}, re-fetching`);
         }
@@ -359,13 +388,30 @@ async function startServer() {
 
       const segments = normaliseToSeconds(raw);
 
-      // Cache normalised segments in DB
+      // Cache normalised segments in DB, then kick off background translation
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
       console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length} sample=${JSON.stringify(segments[0])}`);
-      res.json({ segments });
+      generateAndCachePLTranslations(id, segments).catch(() => {}); // fire-and-forget
+      res.json({ segments, translations: null });
     } catch (error: any) {
       console.error("[SEGMENTS] error:", error?.message || error);
       res.status(500).json({ error: error?.message || "Błąd pobierania segmentów" });
+    }
+  });
+
+  // Transcript: Poll for cached Polish translations (generated in background)
+  app.get("/api/transcripts/:id/translations", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const source = await prisma.transcriptSource.findUnique({
+        where: { id },
+        select: { segTranslations: true },
+      });
+      if (!source) return res.status(404).json({ error: "Not found" });
+      const ready = source.segTranslations && Object.keys(source.segTranslations).length > 5;
+      res.json({ translations: ready ? source.segTranslations : null, ready: !!ready });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message });
     }
   });
 

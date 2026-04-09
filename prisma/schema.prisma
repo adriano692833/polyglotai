@@ -112,16 +112,17 @@ model DailyChallenge {
 }
 
 model TranscriptSource {
-  id         String   @id @default(cuid())
-  userId     String
-  url        String
-  videoId    String
-  title      String
-  transcript String
-  segments   Json?
-  lang       String   @default("en")
-  createdAt  DateTime @default(now())
-  flashcards Flashcard[]
+  id              String   @id @default(cuid())
+  userId          String
+  url             String
+  videoId         String
+  title           String
+  transcript      String
+  segments        Json?
+  segTranslations Json?
+  lang            String   @default("en")
+  createdAt       DateTime @default(now())
+  flashcards      Flashcard[]
 
   @@unique([userId, url])
 }

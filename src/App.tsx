@@ -2641,12 +2641,44 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
           setSegments(offset > 0
             ? raw.map(s => ({ ...s, start: Math.max(0, s.start - offset) }))
             : raw);
+          // Use server-pre-generated translations if already available
+          if (d.translations && typeof d.translations === 'object' && Object.keys(d.translations).length > 5) {
+            setSegTranslations(d.translations as Record<number, string>);
+          }
         }
         else setSegsError(d.error || 'Brak segmentów dla tego filmiku');
       })
       .catch(() => setSegsError('Błąd pobierania segmentów'))
       .finally(() => setLoadingSegs(false));
   }, [selectedTranscript?.id]);
+
+  // Poll server for background-generated translations when not yet available
+  useEffect(() => {
+    if (!selectedTranscript) return;
+    if (segments.length === 0) return;
+    if (Object.keys(segTranslations).length > 5) return; // already loaded
+    let stopped = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 36; // ~3 min at 5s interval
+    const poll = () => {
+      if (stopped || attempts >= MAX_ATTEMPTS) return;
+      attempts++;
+      fetch(`/api/transcripts/${selectedTranscript.id}/translations`)
+        .then(r => r.json())
+        .then(d => {
+          if (stopped) return;
+          if (d.translations && typeof d.translations === 'object' && Object.keys(d.translations).length > 5) {
+            setSegTranslations(d.translations as Record<number, string>);
+            stopped = true;
+          } else {
+            setTimeout(poll, 5000);
+          }
+        })
+        .catch(() => { if (!stopped) setTimeout(poll, 5000); });
+    };
+    const timer = setTimeout(poll, 3000); // first check after 3s
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [selectedTranscript?.id, segments.length]);
 
   // Per-segment dual-subtitle translation (lazy, cached)
   useEffect(() => {
@@ -2665,10 +2697,10 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
       .catch(() => {});
   }, [dualSubs, currentSegIdx]);
 
-  // Batch-translate all segments when dual subs first enabled (up to 80)
+  // Batch-translate all segments when dual subs first enabled (up to 80) — fallback if server translations not ready
   useEffect(() => {
     if (!dualSubs || segments.length === 0) return;
-    if (Object.keys(segTranslations).length > 0) return;
+    if (Object.keys(segTranslations).length > 0) return; // server translations already loaded
 
     setTranslatingDual(true);
     const batch = segments.slice(0, 80);
