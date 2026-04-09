@@ -307,25 +307,35 @@ async function startServer() {
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
       if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
 
-      // Normalise whatever Supadata returns into a stable {text, start, dur} shape.
-      // Supadata uses `offset` (seconds float) and `duration`, not `start`/`dur`.
-      const normalise = (raw: any[]) =>
-        raw.map((seg: any) => ({
-          text: String(seg.text || ""),
-          start: Number(seg.start ?? seg.offset ?? 0),
-          dur:   Number(seg.dur   ?? seg.duration ?? 0),
+      // Supadata returns offset/duration in MILLISECONDS.
+      // Normalise to seconds and use consistent {text, start, dur} field names.
+      const normaliseToSeconds = (raw: any[]): Array<{text: string; start: number; dur: number}> => {
+        // Detect if values are in ms: if the gap between first two segments > 30,
+        // they must be in ms (real caption gaps are 1-10 seconds, not 30+ seconds)
+        const secondVal = Number(raw[1]?.start ?? raw[1]?.offset ?? 0);
+        const firstVal  = Number(raw[0]?.start ?? raw[0]?.offset ?? 0);
+        const gap = raw.length > 1 ? secondVal - firstVal : 0;
+        const divisor = gap > 30 ? 1000 : 1; // divide ms → seconds
+        return raw.map((seg: any) => ({
+          text:  String(seg.text || ""),
+          start: Number(seg.start ?? seg.offset ?? 0) / divisor,
+          dur:   Number(seg.dur   ?? seg.duration ?? 0) / divisor,
         }));
+      };
 
-      // Return cached segments – but re-normalise in case they were stored with old field names
+      // Return cached segments – invalidate if stored in ms (gap between first two > 30)
       if (source.segments) {
         const cached = Array.isArray(source.segments) ? source.segments : [];
-        // If first segment already has NaN start (old cached bad data), force re-fetch
-        const first = cached[0] as any;
-        if (cached.length > 0 && isFinite(Number(first?.start ?? first?.offset))) {
-          return res.json({ segments: normalise(cached) });
+        if (cached.length > 0) {
+          const gap = cached.length > 1
+            ? Number((cached[1] as any).start ?? 0) - Number((cached[0] as any).start ?? 0)
+            : 0;
+          if (gap <= 30) {
+            // Already in seconds — return as-is
+            return res.json({ segments: cached });
+          }
+          console.log(`[SEGMENTS] stale ms cache id=${id} gap=${gap}, re-fetching`);
         }
-        // Bad cache – fall through to re-fetch
-        console.log(`[SEGMENTS] stale cache for id=${id}, re-fetching`);
       }
 
       // Fetch timed segments from Supadata (text=false returns array of caption objects)
@@ -347,7 +357,7 @@ async function startServer() {
         return res.status(404).json({ error: "Brak segmentów czasowych dla tego filmiku (brak napisów)" });
       }
 
-      const segments = normalise(raw);
+      const segments = normaliseToSeconds(raw);
 
       // Cache normalised segments in DB
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
