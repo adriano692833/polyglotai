@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor } from 'lucide-react';
+import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X } from 'lucide-react';
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
 
@@ -1091,154 +1091,165 @@ Zwróć WYŁĄCZNIE JSON:
 }
 
 function Flashcards({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
-  const [cards, setCards] = useState<any[]>([]);
+  // Card data
+  const [allCards, setAllCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Generation controls
   const [generating, setGenerating] = useState(false);
   const [quickGenerating, setQuickGenerating] = useState(false);
-  const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [lang, setLang] = useState('en');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [quickPrompt, setQuickPrompt] = useState('');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
 
+  // Study session state
+  const [studyDeck, setStudyDeck] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [knownIds, setKnownIds] = useState<string[]>([]);
+
+  // AI panel
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   useEffect(() => {
     fetch(`/api/flashcards?userId=${user.id}`)
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data)) setCards(data);
-        else console.error("Invalid flashcards data:", data);
+        if (Array.isArray(data)) { setAllCards(data); setStudyDeck([...data]); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user.id]);
 
-  const generate = async () => {
-    setGenerating(true);
-    setStatusMessage('Generowanie fiszek...');
-    try {
-      const transcriptContext = selectedTranscript
-        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
-        : '';
-      const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.
-${transcriptContext}
-Zwróć WYŁĄCZNIE JSON (tablica):
-[
-  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
-]`;
-      const aiText = await requestAiText(prompt, true);
-      const cardsData = parseAiJson<any[]>(aiText, []);
+  // Navigation
+  const handleNext = useCallback(() => {
+    setIsFlipped(false); setAiResponse(null);
+    setTimeout(() => setCurrentIndex(p => (p + 1) % studyDeck.length), 150);
+  }, [studyDeck.length]);
 
-      const saveRes = await fetch('/api/flashcards/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
+  const handlePrev = useCallback(() => {
+    setIsFlipped(false); setAiResponse(null);
+    setTimeout(() => setCurrentIndex(p => (p - 1 + studyDeck.length) % studyDeck.length), 150);
+  }, [studyDeck.length]);
+
+  const handleFlip = useCallback(() => setIsFlipped(f => !f), []);
+
+  const handleMarkAsKnown = useCallback(() => {
+    if (!studyDeck.length) return;
+    const card = studyDeck[currentIndex];
+    setIsFlipped(false); setAiResponse(null);
+    setKnownIds(prev => [...prev, card.id]);
+    setTimeout(() => {
+      setStudyDeck(prev => {
+        const next = prev.filter(c => c.id !== card.id);
+        setCurrentIndex(ci => Math.min(ci, Math.max(0, next.length - 1)));
+        return next;
       });
+    }, 150);
+  }, [studyDeck, currentIndex]);
+
+  const handleShuffle = () => {
+    setIsFlipped(false); setAiResponse(null);
+    setTimeout(() => { setStudyDeck(p => [...p].sort(() => Math.random() - 0.5)); setCurrentIndex(0); }, 200);
+  };
+
+  const handleReset = () => {
+    setIsFlipped(false); setAiResponse(null); setKnownIds([]);
+    setTimeout(() => { setStudyDeck([...allCards]); setCurrentIndex(0); }, 200);
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!studyDeck.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') handleNext();
+      else if (e.key === 'ArrowLeft') handlePrev();
+      else if (e.key === 'ArrowUp') { e.preventDefault(); handleMarkAsKnown(); }
+      else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleFlip(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleNext, handlePrev, handleFlip, handleMarkAsKnown, studyDeck.length]);
+
+  // AI helper
+  const callAI = async (prompt: string) => {
+    setAiLoading(true); setAiResponse(null);
+    try { setAiResponse(await requestAiText(prompt, false)); }
+    catch { setAiResponse('Błąd AI. Spróbuj ponownie.'); }
+    finally { setAiLoading(false); }
+  };
+
+  // Card generation (preserved logic)
+  const generate = async () => {
+    setGenerating(true); setStatusMessage('Generowanie fiszek...');
+    try {
+      const ctx = selectedTranscript ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}` : '';
+      const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.\n${ctx}\nZwróć WYŁĄCZNIE JSON (tablica):\n[{ "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }]`;
+      const cardsData = parseAiJson<any[]>(await requestAiText(prompt, true), []);
+      const saveRes = await fetch('/api/flashcards/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }) });
       const data = await saveRes.json();
-      if (!saveRes.ok) {
-        setStatusMessage(data?.error || 'Nie udało się zapisać fiszek.');
-      } else if (data.flashcards && Array.isArray(data.flashcards)) {
-        setCards([...data.flashcards, ...cards]);
-        setTopic('');
-        setStatusMessage(`Dodano ${data.flashcards.length} nowych fiszek.`);
-      } else {
-        console.error("Invalid flashcards data:", data);
-        setStatusMessage('AI zwróciło niepoprawne dane fiszek.');
-      }
-    } catch (err) {
-      console.error(err);
-      setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
-    } finally {
-      setGenerating(false);
-    }
+      if (!saveRes.ok) { setStatusMessage(data?.error || 'Błąd zapisu.'); }
+      else if (Array.isArray(data.flashcards)) {
+        setAllCards(prev => [...data.flashcards, ...prev]);
+        setStudyDeck(prev => [...data.flashcards, ...prev]);
+        setTopic(''); setStatusMessage(`Dodano ${data.flashcards.length} nowych fiszek.`);
+      } else setStatusMessage('AI zwróciło niepoprawne dane.');
+    } catch { setStatusMessage('Błąd generowania fiszek.'); }
+    finally { setGenerating(false); }
   };
 
   const generateOnDemand = async () => {
     if (!quickPrompt.trim()) return;
-    setQuickGenerating(true);
-    setStatusMessage('Generowanie fiszek na zawołanie...');
+    setQuickGenerating(true); setStatusMessage('Generowanie fiszek na zawołanie...');
     try {
-      const transcriptContext = selectedTranscript
-        ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}`
-        : '';
-      const prompt = `Na podstawie polecenia użytkownika wygeneruj 3 fiszki do nauki języka ${lang}.
-Polecenie użytkownika: "${quickPrompt}".
-${transcriptContext}
-Zwróć WYŁĄCZNIE JSON (tablica):
-[
-  { "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }
-]`;
-      const aiText = await requestAiText(prompt, true);
-      const cardsData = parseAiJson<any[]>(aiText, []).filter((c: any) => c?.front && c?.back);
-      if (!cardsData.length) return;
-
-      const saveRes = await fetch('/api/flashcards/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }),
-      });
+      const ctx = selectedTranscript ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}` : '';
+      const prompt = `Na podstawie polecenia wygeneruj 3 fiszki do nauki języka ${lang}.\nPolecenie: "${quickPrompt}".\n${ctx}\nZwróć WYŁĄCZNIE JSON (tablica):\n[{ "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }]`;
+      const cardsData = parseAiJson<any[]>(await requestAiText(prompt, true), []).filter((c: any) => c?.front && c?.back);
+      if (!cardsData.length) { setStatusMessage('Brak fiszek w odpowiedzi AI.'); return; }
+      const saveRes = await fetch('/api/flashcards/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }) });
       const data = await saveRes.json();
-      if (!saveRes.ok) {
-        setStatusMessage(data?.error || 'Nie udało się zapisać fiszek.');
-      } else if (Array.isArray(data.flashcards)) {
-        setCards([...data.flashcards, ...cards]);
-        setQuickPrompt('');
-        setStatusMessage(`Dodano ${data.flashcards.length} fiszki z polecenia.`);
-      }
-    } catch (err) {
-      console.error(err);
-      setStatusMessage('Błąd generowania fiszek. Sprawdź logi serwera.');
-    } finally {
-      setQuickGenerating(false);
-    }
+      if (saveRes.ok && Array.isArray(data.flashcards)) {
+        setAllCards(prev => [...data.flashcards, ...prev]);
+        setStudyDeck(prev => [...data.flashcards, ...prev]);
+        setQuickPrompt(''); setStatusMessage(`Dodano ${data.flashcards.length} fiszki.`);
+      } else setStatusMessage(data?.error || 'Błąd zapisu.');
+    } catch { setStatusMessage('Błąd generowania fiszek.'); }
+    finally { setQuickGenerating(false); }
   };
+
+  const currentCard = studyDeck[currentIndex];
+  const langName = PRACTICE_LANGS.find(l => l.code === (currentCard?.lang || lang))?.name || lang;
+  const knownPct = allCards.length > 0 ? (knownIds.length / allCards.length) * 100 : 0;
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
         <h2 className={`text-2xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : ''}`}>
           {isKidMode ? "Twoje Magiczne Karty 🃏" : "Twoje Fiszki"}
         </h2>
         <div className="flex gap-3">
-          <select 
-            value={lang} 
-            onChange={(e) => setLang(e.target.value)}
-            className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-2.5 text-sm font-bold outline-none shadow-sm focus:ring-2 focus:ring-brand-500"
-          >
+          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-5 py-2.5 text-sm font-bold outline-none shadow-sm focus:ring-2 focus:ring-brand-500">
             {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
           </select>
-          <button 
-            onClick={generate}
-            disabled={generating}
-            className={`px-8 py-3 rounded-2xl text-sm font-black shadow-2xl transition-all flex items-center gap-3 transform active:scale-95 ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}
-          >
+          <button onClick={generate} disabled={generating} className={`px-8 py-3 rounded-2xl text-sm font-black shadow-2xl transition-all flex items-center gap-3 transform active:scale-95 ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}>
             {generating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             {isKidMode ? "Wyrysuj nowe karty! ✨" : "Generuj nowe"}
           </button>
         </div>
       </div>
 
+      {/* Config panel */}
       <div className="glass rounded-[2.5rem] p-10 border border-white/20 dark:border-white/5 shadow-2xl">
-        <TranscriptPicker
-          userId={user.id}
-          lang={lang}
-          selectedId={selectedTranscript?.id || null}
-          onSelect={setSelectedTranscript}
-        />
+        <TranscriptPicker userId={user.id} lang={lang} selectedId={selectedTranscript?.id || null} onSelect={setSelectedTranscript} />
         <div className="mb-8 space-y-3">
           <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Generuj na zawołanie</label>
           <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              value={quickPrompt}
-              onChange={(e) => setQuickPrompt(e.target.value)}
-              placeholder="Np. podróż pociągiem, rozmowa u lekarza, czasowniki nieregularne..."
-              className="flex-1 bg-white/50 dark:bg-slate-900/50 border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3.5 outline-none font-semibold"
-            />
-            <button
-              onClick={generateOnDemand}
-              disabled={quickGenerating || !quickPrompt.trim()}
-              className={`px-6 py-3.5 rounded-2xl font-black shadow-xl transition-all disabled:opacity-50 ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}
-            >
+            <input value={quickPrompt} onChange={(e) => setQuickPrompt(e.target.value)} placeholder="Np. podróż pociągiem, rozmowa u lekarza, czasowniki nieregularne..." className="flex-1 bg-white/50 dark:bg-slate-900/50 border border-white/20 dark:border-white/5 rounded-2xl px-5 py-3.5 outline-none font-semibold" />
+            <button onClick={generateOnDemand} disabled={quickGenerating || !quickPrompt.trim()} className={`px-6 py-3.5 rounded-2xl font-black shadow-xl transition-all disabled:opacity-50 ${isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white'}`}>
               {quickGenerating ? "Generuję..." : "Generuj 3 fiszki"}
             </button>
           </div>
@@ -1247,43 +1258,111 @@ Zwróć WYŁĄCZNIE JSON (tablica):
         {statusMessage && <p className="mt-4 text-sm font-bold text-brand-500">{statusMessage}</p>}
       </div>
 
+      {/* Study area */}
       {loading ? (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-64 glass animate-pulse rounded-[2rem]" />)}
-        </div>
-      ) : cards.length === 0 ? (
+        <div className="h-72 glass animate-pulse rounded-[3rem]" />
+      ) : allCards.length === 0 ? (
         <div className="text-center py-32 glass rounded-[3rem] border-2 border-dashed border-slate-200/60 dark:border-slate-800/60">
           <Layers className="h-16 w-16 text-slate-300 mx-auto mb-6 opacity-20" />
-          <p className="text-slate-500 font-bold text-xl">Nie masz jeszcze żadnych kart. Kliknij przycisk powyżej!</p>
+          <p className="text-slate-500 font-bold text-xl">Nie masz jeszcze żadnych kart. Kliknij "Generuj nowe"!</p>
         </div>
+      ) : studyDeck.length === 0 ? (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`p-12 rounded-[3rem] border shadow-2xl text-center glass ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`}>
+          <Trophy className={`h-20 w-20 mx-auto mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.4)] ${isKidMode ? 'text-purple-500' : 'text-yellow-500'}`} />
+          <h3 className="text-3xl font-black tracking-tight mb-4">{isKidMode ? "Brawo! Znasz wszystko! 🎉" : "Znasz wszystkie karty! 🎉"}</h3>
+          <p className="text-slate-500 font-semibold mb-8">Opanowałeś {knownIds.length} fiszek w tej sesji.</p>
+          <button onClick={handleReset} className={`px-10 py-4 rounded-2xl font-black text-lg shadow-2xl inline-flex items-center gap-2 ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}>
+            <RotateCcw className="h-5 w-5" /> Zacznij od nowa
+          </button>
+        </motion.div>
       ) : (
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {cards.map((card, i) => (
-            <motion.div 
-              key={card.id} 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              onClick={() => setFlipped(f => ({ ...f, [card.id]: !f[card.id] }))}
-              className="h-64 perspective-1000 cursor-pointer group"
-            >
-              <div className={`relative w-full h-full transition-all duration-700 transform-style-3d ${flipped[card.id] ? 'rotate-y-180' : ''}`}>
-                <div className={`absolute inset-0 backface-hidden rounded-[2rem] border-2 shadow-xl flex flex-col items-center justify-center p-8 text-center transition-all duration-500 glass group-hover:shadow-2xl group-hover:-translate-y-1 ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`}>
-                  <Badge variant="outline" className="mb-6 text-[10px] uppercase tracking-[0.2em] font-black opacity-40">{card.lang}</Badge>
-                  <p className={`text-3xl font-black tracking-tight leading-tight ${isKidMode ? 'text-purple-600' : 'text-slate-900 dark:text-white'}`}>{card.front}</p>
-                  <div className="mt-8 text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity duration-300">Kliknij aby odwrócić</div>
-                </div>
-                <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center p-8 text-center text-white brand-gradient ${isKidMode ? 'from-purple-500 via-pink-500 to-orange-400' : 'brand-shadow'}`}>
-                  <p className="text-3xl font-black tracking-tight leading-tight mb-4 drop-shadow-lg">{card.back}</p>
-                  <div className="flex gap-3 mt-6">
-                    <div className="p-3 bg-white/20 backdrop-blur-md rounded-full border border-white/30 shadow-lg">
-                      <Check className="h-5 w-5" />
-                    </div>
+        <div className="space-y-6">
+          {/* Progress */}
+          <div>
+            <div className="flex justify-between text-xs font-semibold text-slate-400 mb-2">
+              <span>Karta {currentIndex + 1} z {studyDeck.length} · opanowano {knownIds.length}/{allCards.length}</span>
+              <span>{Math.round(knownPct)}%</span>
+            </div>
+            <div className="w-full bg-slate-200/60 dark:bg-slate-800/60 rounded-full h-2 overflow-hidden">
+              <div className="bg-emerald-500 h-2 transition-all duration-300" style={{ width: `${knownPct}%` }} />
+            </div>
+          </div>
+
+          {/* 3D Flip Card */}
+          <div className="relative w-full h-72 sm:h-80 cursor-pointer select-none" style={{ perspective: '1000px' }} onClick={handleFlip}>
+            <div className="w-full h-full relative transition-transform duration-500 ease-in-out" style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
+              {/* Front */}
+              <div className={`absolute inset-0 rounded-[2.5rem] border-2 shadow-2xl flex flex-col items-center justify-center p-8 glass ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`} style={{ backfaceVisibility: 'hidden' }}>
+                <Badge variant="outline" className="mb-4 text-[10px] uppercase tracking-[0.2em] font-black opacity-40">{currentCard.lang}</Badge>
+                <p className={`text-4xl sm:text-5xl font-black tracking-tight text-center leading-tight ${isKidMode ? 'text-purple-600' : 'text-slate-900 dark:text-white'}`}>{currentCard.front}</p>
+                <p className="absolute bottom-5 text-slate-400 text-xs font-semibold animate-pulse">Kliknij aby obrócić · Spacja</p>
+              </div>
+              {/* Back */}
+              <div className="absolute inset-0 rounded-[2.5rem] shadow-2xl flex flex-col items-center justify-center p-8 text-white brand-gradient" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
+                <p className="text-3xl sm:text-4xl font-black tracking-tight text-center leading-tight drop-shadow-lg">{currentCard.back}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+            <button onClick={handlePrev} title="Poprzednia (←)" className="p-4 rounded-full glass border border-white/20 dark:border-white/10 hover:border-brand-500/40 transition-all shadow-sm active:scale-95">
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button onClick={handleMarkAsKnown} title="Umiem to! (↑)" className="flex items-center gap-2 px-6 py-4 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 font-black shadow-sm hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all active:scale-95">
+              <Check className="h-5 w-5" /><span className="hidden sm:inline">Umiem to!</span>
+            </button>
+            <button onClick={handleShuffle} title="Tasuj" className="flex items-center gap-2 px-5 py-4 rounded-full glass border border-white/20 dark:border-white/10 hover:border-brand-500/40 font-semibold transition-all shadow-sm active:scale-95">
+              <Shuffle className="h-5 w-5" /><span className="hidden lg:inline text-sm">Tasuj</span>
+            </button>
+            <button onClick={handleReset} title="Resetuj sesję" className="flex items-center gap-2 px-5 py-4 rounded-full glass border border-white/20 dark:border-white/10 hover:border-red-400/40 text-red-500 font-semibold transition-all shadow-sm active:scale-95">
+              <RotateCcw className="h-5 w-5" /><span className="hidden lg:inline text-sm">Resetuj</span>
+            </button>
+            <button onClick={handleNext} title="Następna (→)" className="p-4 rounded-full glass border border-white/20 dark:border-white/10 hover:border-brand-500/40 transition-all shadow-sm active:scale-95">
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </div>
+          <p className="text-center text-xs text-slate-400 font-medium">← → nawigacja · ↑ umiem to! · Spacja / Enter — odwróć</p>
+
+          {/* AI Panel */}
+          <div className={`glass rounded-[2rem] p-6 border shadow-xl space-y-4 ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Asystent AI — {currentCard.front}</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <button onClick={() => callAI(`Napisz jedno nowe zdanie w języku ${langName} z użyciem: "${currentCard.front}". Pod spodem podaj polskie tłumaczenie. Krótko i zwięźle.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-semibold text-sm hover:bg-indigo-100 transition-all disabled:opacity-50 active:scale-95">
+                <Sparkles className="h-4 w-4 shrink-0" />Przykład
+              </button>
+              <button onClick={() => callAI(`Wyjaśnij krótko po polsku niuanse gramatyczne i znaczeniowe wyrazu "${currentCard.front}" w języku ${langName}. Co sprawia trudność osobom polskojęzycznym?`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 font-semibold text-sm hover:bg-purple-100 transition-all disabled:opacity-50 active:scale-95">
+                <BookOpen className="h-4 w-4 shrink-0" />Gramatyka
+              </button>
+              <button onClick={() => callAI(`Stwórz krótką zabawną mnemotechnikę pomagającą zapamiętać "${currentCard.front}" (${currentCard.back}) osobie polskojęzycznej.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 font-semibold text-sm hover:bg-amber-100 transition-all disabled:opacity-50 active:scale-95">
+                <Brain className="h-4 w-4 shrink-0" />Pamięć
+              </button>
+              <button onClick={() => callAI(`Wygeneruj krótkie pytanie testowe A/B/C sprawdzające znajomość "${currentCard.front}" w języku ${langName}. Na końcu podaj poprawną odpowiedź.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 font-semibold text-sm hover:bg-emerald-100 transition-all disabled:opacity-50 active:scale-95">
+                <HelpCircle className="h-4 w-4 shrink-0" />Quiz
+              </button>
+            </div>
+            {(aiLoading || aiResponse) && (
+              <div className="relative bg-white/50 dark:bg-slate-900/50 rounded-2xl p-5 border border-white/20 dark:border-white/5">
+                {aiResponse && !aiLoading && (
+                  <button onClick={() => setAiResponse(null)} className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                <div className="flex items-start gap-3">
+                  <div className="bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 p-2 rounded-xl shrink-0">
+                    <Sparkles className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="flex-1 text-sm leading-relaxed whitespace-pre-wrap pt-0.5 pr-6">
+                    {aiLoading ? (
+                      <span className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-semibold">
+                        <Loader2 className="h-4 w-4 animate-spin" />Generowanie...
+                      </span>
+                    ) : aiResponse}
                   </div>
                 </div>
               </div>
-            </motion.div>
-          ))}
+            )}
+          </div>
         </div>
       )}
     </div>
