@@ -766,7 +766,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
     if (count === 0) {
       const today = new Date().toISOString().split('T')[0];
       await prisma.dailyChallenge.create({
-        data: { 
+        data: {
           date: today,
           prompt: "Napisz 3 zdania o swoim ulubionym zwierzątku!",
           lang: "en",
@@ -775,7 +775,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
       });
     }
   };
-  seedChallenges();
+  seedChallenges().catch(e => console.error('[SEED]', e?.message || e));
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
