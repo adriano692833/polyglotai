@@ -2602,11 +2602,21 @@ function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKi
       .then(d => {
         if (Array.isArray(d.segments)) {
           // Normalise field names — Supadata may use offset/duration instead of start/dur
-          setSegments(d.segments.map((seg: any) => ({
+          const raw = d.segments.map((seg: any) => ({
             text:  String(seg.text || ''),
             start: Number(seg.start ?? seg.offset ?? 0),
             dur:   Number(seg.dur   ?? seg.duration ?? 0),
-          })));
+          }));
+          // Many YouTube videos (clips from broadcasts) have caption timestamps that
+          // start far into the global timeline (e.g. 7:28) rather than 0:00.
+          // Normalise by subtracting the first segment's start so that:
+          //   • display always begins at 0:00
+          //   • seekTo receives a clip-relative position (matching getCurrentTime())
+          const firstStart = raw.length > 0 ? raw[0].start : 0;
+          const offset = firstStart > 30 ? firstStart : 0;
+          setSegments(offset > 0
+            ? raw.map(s => ({ ...s, start: Math.max(0, s.start - offset) }))
+            : raw);
         }
         else setSegsError(d.error || 'Brak segmentów dla tego filmiku');
       })
@@ -2872,13 +2882,20 @@ function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKi
                         : 'hover:bg-white/10 dark:hover:bg-white/5 border border-transparent'
                     }`}
                   >
-                    <span className="text-[10px] text-slate-400 font-mono mr-2 select-none">{fmtTime(seg.start)}</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); playerRef.current?.seekTo?.(seg.start, true); }}
+                      className="text-[10px] text-slate-400 font-mono mr-2 select-none hover:text-brand-500 transition-colors"
+                      title="Przejdź do tego miejsca w filmie"
+                    >▶ {fmtTime(seg.start)}</button>
                     {seg.text.split(' ').map((w, wi) => {
                       const clean = w.replace(/[.,!?;:"""„()\[\]]/g, '');
                       return (
                         <span
                           key={wi}
-                          onClick={e => handleWordClick(w, e)}
+                          onClick={e => {
+                            playerRef.current?.seekTo?.(seg.start, true);
+                            handleWordClick(w, e);
+                          }}
                           className={`inline-block mr-1 cursor-pointer transition-colors text-sm ${
                             savedWords.has(clean)
                               ? 'text-emerald-500 font-bold'
