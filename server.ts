@@ -255,47 +255,44 @@ async function startServer() {
     }
   });
 
-  // Transcript sources: Format with AI
+  // Transcript sources: Format (heuristic - fast, no AI, works for any length)
   app.post("/api/transcripts/:id/format", async (req, res) => {
-    const startedAt = Date.now();
     try {
       const { id } = req.params;
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
       if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
 
-      // Split into ~1400-char chunks at word boundaries to stay within free model token limits
-      const CHUNK_SIZE = 1400;
       const raw = source.transcript.replace(/\s+/g, ' ').trim();
-      const chunks: string[] = [];
-      let pos = 0;
-      while (pos < raw.length) {
-        let end = Math.min(pos + CHUNK_SIZE, raw.length);
-        // Break at last space to avoid cutting a word
-        if (end < raw.length) {
-          const lastSpace = raw.lastIndexOf(' ', end);
-          if (lastSpace > pos) end = lastSpace;
+
+      // Try sentence-based grouping (works when transcript has punctuation)
+      const sentenceMatches = raw.match(/[^.!?]*[.!?]+(?:\s+|$)/g) ?? [];
+      let transcript: string;
+
+      if (sentenceMatches.length >= 5) {
+        // Has enough punctuation – group every 3 sentences into a paragraph
+        const paras: string[] = [];
+        for (let i = 0; i < sentenceMatches.length; i += 3) {
+          paras.push(sentenceMatches.slice(i, i + 3).join('').trim());
         }
-        chunks.push(raw.slice(pos, end).trim());
-        pos = end + 1;
+        // Append any tail text not captured by the regex
+        const tail = raw.slice(sentenceMatches.join('').length).trim();
+        if (tail) paras.push(tail);
+        transcript = paras.join('\n\n');
+      } else {
+        // No / little punctuation (common for YouTube auto-captions)
+        // Split into paragraphs of ~55 words
+        const words = raw.split(' ');
+        const WORDS = 55;
+        const paras: string[] = [];
+        for (let i = 0; i < words.length; i += WORDS) {
+          const chunk = words.slice(i, i + WORDS).join(' ');
+          paras.push(chunk.charAt(0).toUpperCase() + chunk.slice(1));
+        }
+        transcript = paras.join('\n\n');
       }
 
-      console.log(`[FORMAT] id=${id} chunks=${chunks.length} rawLen=${raw.length}`);
-
-      const formatted: string[] = [];
-      for (let i = 0; i < chunks.length; i++) {
-        const prompt = `Poniższy tekst to fragment transkrypcji wideo (część ${i + 1} z ${chunks.length}). Podziel go na akapity (2-4 zdania każdy), dodaj brakującą interpunkcję i popraw wielkie litery na początku zdań. Nie tłumacz, nie skracaj, nie zmieniaj słów. Zwróć TYLKO sformatowany tekst, bez komentarzy:\n\n${chunks[i]}`;
-        const result = await callAI(prompt);
-        // Strip any think tags or markdown the model might add
-        formatted.push(stripMarkdownJson(result));
-      }
-
-      const transcript = formatted.join('\n\n');
-      const updated = await prisma.transcriptSource.update({
-        where: { id },
-        data: { transcript },
-      });
-
-      console.log(`[FORMAT] done id=${id} durationMs=${Date.now() - startedAt}`);
+      const updated = await prisma.transcriptSource.update({ where: { id }, data: { transcript } });
+      console.log(`[FORMAT] id=${id} words=${raw.split(' ').length} paras=${transcript.split('\n\n').length}`);
       res.json(updated);
     } catch (error: any) {
       console.error(`[FORMAT] error durationMs=${Date.now() - startedAt}`, error?.message || error);

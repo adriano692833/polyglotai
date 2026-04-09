@@ -2092,8 +2092,7 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
   const formatTranscript = async () => {
     if (!selectedTranscript) return;
     setFormatting(true);
-    const chunks = Math.ceil(selectedTranscript.transcript.replace(/\s+/g, ' ').trim().length / 1400);
-    setFormatStatus(`Formatowanie AI (${chunks} ${chunks === 1 ? 'fragment' : chunks < 5 ? 'fragmenty' : 'fragmentów'})…`);
+    setFormatStatus('Formatowanie…');
     try {
       const res = await fetch(`/api/transcripts/${selectedTranscript.id}/format`, { method: 'POST' });
       const data = await res.json();
@@ -2201,7 +2200,7 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
                   className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all shadow-lg glass border border-white/20 dark:border-white/10 hover:border-brand-500/40 disabled:opacity-50"
                 >
                   {formatting ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="text-base">✨</span>}
-                  Formatuj AI
+                  Formatuj
                 </button>
                 <button
                   onClick={() => speak(selectedTranscript.transcript)}
