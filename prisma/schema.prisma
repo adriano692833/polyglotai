@@ -118,6 +118,7 @@ model TranscriptSource {
   videoId    String
   title      String
   transcript String
+  segments   Json?
   lang       String   @default("en")
   createdAt  DateTime @default(now())
   flashcards Flashcard[]

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X } from 'lucide-react';
+import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X, Play } from 'lucide-react';
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
 
@@ -64,9 +64,13 @@ type TranscriptSource = {
   id: string;
   title: string;
   url: string;
+  videoId: string;
   transcript: string;
   lang: string;
 };
+
+type Segment = { text: string; start: number; dur: number };
+type WordPopup = { word: string; x: number; y: number; translation: string | null; saving: boolean };
 
 async function fetchTranscriptSources(userId: string, lang: string): Promise<TranscriptSource[]> {
   const res = await fetch(`/api/transcripts?userId=${encodeURIComponent(userId)}&lang=${encodeURIComponent(lang)}`);
@@ -463,6 +467,7 @@ export default function App() {
           <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label={isKidMode ? "Wyzwanie" : "Wyzwanie"} isKidMode={isKidMode} />
           <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label={isKidMode ? "Tłumacz" : "Tłumacz"} isKidMode={isKidMode} />
           <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="Transkrypcje" isKidMode={isKidMode} />
+          <NavButton id="player" active={activeTab === 'player'} onClick={setActiveTab} icon={<Play className="h-4 w-4" />} label="Odtwarzacz" isKidMode={isKidMode} />
         </div>
       </nav>
 
@@ -485,6 +490,7 @@ export default function App() {
             {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} />}
             {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} />}
             {activeTab === 'transcripts' && <TranscriptViewer user={user} isKidMode={isKidMode} />}
+            {activeTab === 'player' && <VideoPlayer user={user} isKidMode={isKidMode} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -2337,6 +2343,518 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
           </div>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Language Reactor-style Video Player tab
+// ─────────────────────────────────────────────────────────────────────────────
+function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }) {
+  const [lang, setLang] = useState('en');
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [loadingSegs, setLoadingSegs] = useState(false);
+  const [segsError, setSegsError] = useState('');
+  const [currentTime, setCurrentTime] = useState(0);
+  const [dualSubs, setDualSubs] = useState(false);
+  const [segTranslations, setSegTranslations] = useState<Record<number, string>>({});
+  const [translatingDual, setTranslatingDual] = useState(false);
+  const [popup, setPopup] = useState<WordPopup | null>(null);
+  const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+
+  const playerRef = useRef<any>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playerDivRef = useRef<HTMLDivElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const segRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const prevSegIdxRef = useRef(-1);
+
+  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  const speakWord = (text: string) => {
+    if (!window.speechSynthesis) return;
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = lang;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utt);
+  };
+
+  // Current segment index (most recent segment whose start ≤ currentTime)
+  const currentSegIdx = useMemo(() => {
+    if (segments.length === 0) return -1;
+    let idx = -1;
+    for (let i = 0; i < segments.length; i++) {
+      if (currentTime >= segments[i].start) idx = i;
+      else break;
+    }
+    return idx;
+  }, [currentTime, segments]);
+
+  // Auto-scroll transcript panel to current segment
+  useEffect(() => {
+    if (currentSegIdx < 0) return;
+    const el = segRefs.current[currentSegIdx];
+    if (el && transcriptRef.current) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [currentSegIdx]);
+
+  // Load YouTube IFrame API (idempotent)
+  useEffect(() => {
+    if ((window as any).YT?.Player) return;
+    if (!document.getElementById('yt-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'yt-iframe-api';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  }, []);
+
+  // Create / recreate YouTube player when transcript changes
+  useEffect(() => {
+    if (!selectedTranscript || !playerDivRef.current) return;
+    const vid = selectedTranscript.videoId;
+
+    const create = () => {
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+
+      const container = document.createElement('div');
+      container.id = `yt-${vid}-${Date.now()}`;
+      playerDivRef.current!.innerHTML = '';
+      playerDivRef.current!.appendChild(container);
+
+      playerRef.current = new (window as any).YT.Player(container.id, {
+        videoId: vid,
+        width: '100%',
+        height: '100%',
+        playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+        events: {
+          onStateChange: (e: any) => {
+            if (e.data === 1) { // PLAYING
+              if (pollRef.current) clearInterval(pollRef.current);
+              pollRef.current = setInterval(() => {
+                const t = playerRef.current?.getCurrentTime?.() ?? 0;
+                setCurrentTime(t);
+              }, 300);
+            } else {
+              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            }
+          },
+        },
+      });
+    };
+
+    if ((window as any).YT?.Player) {
+      create();
+    } else {
+      const prev = (window as any).onYouTubeIframeAPIReady;
+      (window as any).onYouTubeIframeAPIReady = () => {
+        if (prev) prev();
+        create();
+      };
+    }
+
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [selectedTranscript?.videoId]);
+
+  // Load timed segments when transcript changes
+  useEffect(() => {
+    if (!selectedTranscript) { setSegments([]); setSegsError(''); return; }
+    setLoadingSegs(true);
+    setSegsError('');
+    setSegments([]);
+    setSegTranslations({});
+    setCurrentTime(0);
+    prevSegIdxRef.current = -1;
+
+    fetch(`/api/transcripts/${selectedTranscript.id}/segments`)
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.segments)) setSegments(d.segments);
+        else setSegsError(d.error || 'Brak segmentów dla tego filmiku');
+      })
+      .catch(() => setSegsError('Błąd pobierania segmentów'))
+      .finally(() => setLoadingSegs(false));
+  }, [selectedTranscript?.id]);
+
+  // Per-segment dual-subtitle translation (lazy, cached)
+  useEffect(() => {
+    if (!dualSubs || currentSegIdx < 0 || currentSegIdx === prevSegIdxRef.current) return;
+    prevSegIdxRef.current = currentSegIdx;
+    if (segTranslations[currentSegIdx]) return;
+
+    const seg = segments[currentSegIdx];
+    if (!seg) return;
+
+    requestAiText(
+      `Przetłumacz to zdanie na polski (odpowiedz TYLKO tłumaczeniem): "${seg.text}"`,
+      false
+    )
+      .then(t => setSegTranslations(prev => ({ ...prev, [currentSegIdx]: t.trim() })))
+      .catch(() => {});
+  }, [dualSubs, currentSegIdx]);
+
+  // Batch-translate all segments when dual subs first enabled (up to 80)
+  useEffect(() => {
+    if (!dualSubs || segments.length === 0) return;
+    if (Object.keys(segTranslations).length > 0) return;
+
+    setTranslatingDual(true);
+    const batch = segments.slice(0, 80);
+    const prompt = `Przetłumacz każdą linię na polski. Zachowaj numerację. Format: "N. tłumaczenie"\n\n${batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 5000)}`;
+    requestAiText(prompt, false)
+      .then(result => {
+        const trans: Record<number, string> = {};
+        result.split('\n').forEach(line => {
+          const m = line.match(/^(\d+)\.\s*(.+)/);
+          if (m) trans[parseInt(m[1])] = m[2].trim();
+        });
+        setSegTranslations(trans);
+      })
+      .catch(() => {})
+      .finally(() => setTranslatingDual(false));
+  }, [dualSubs, segments.length]);
+
+  const handleWordClick = useCallback(async (word: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const clean = word.replace(/[.,!?;:"""„()\[\]«»\-–—]/g, '').trim();
+    if (!clean || clean.length < 2) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.min(rect.left + rect.width / 2 - 110, window.innerWidth - 240);
+    const y = Math.max(rect.top - 10, 10);
+    setPopup({ word: clean, x, y, translation: null, saving: false });
+
+    try {
+      const t = await requestAiText(
+        `Przetłumacz słowo/wyrażenie "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem, bez żadnych dodatkowych słów.`,
+        false
+      );
+      setPopup(p => p?.word === clean ? { ...p, translation: t.trim() } : p);
+    } catch {
+      setPopup(p => p?.word === clean ? { ...p, translation: '—' } : p);
+    }
+  }, [lang]);
+
+  const saveToVocab = async () => {
+    if (!popup?.translation || popup.saving) return;
+    setPopup(p => p ? { ...p, saving: true } : null);
+    const ctx = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
+    try {
+      await fetch('/api/vocabulary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          word: popup.word,
+          translation: popup.translation,
+          lang,
+          context: ctx,
+        }),
+      });
+      setSavedWords(prev => new Set([...prev, popup.word]));
+      setPopup(null);
+    } catch {
+      setPopup(p => p ? { ...p, saving: false } : null);
+    }
+  };
+
+  const saveAsFlashcard = async () => {
+    if (!popup?.translation || popup.saving) return;
+    setPopup(p => p ? { ...p, saving: true } : null);
+    try {
+      await fetch('/api/flashcards/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          lang,
+          cards: [{ front: popup.word, back: popup.translation }],
+          transcriptSourceId: selectedTranscript?.id || null,
+        }),
+      });
+      setSavedWords(prev => new Set([...prev, popup.word]));
+      setPopup(null);
+    } catch {
+      setPopup(p => p ? { ...p, saving: false } : null);
+    }
+  };
+
+  // Fallback: render plain transcript as clickable words (when no timed segments)
+  const plainWords = useMemo(
+    () => (selectedTranscript ? selectedTranscript.transcript.split(/\s+/) : []),
+    [selectedTranscript?.id]
+  );
+
+  return (
+    <div className="space-y-6 pb-24" onClick={() => setPopup(null)}>
+      {/* ── Settings bar ── */}
+      <div className={`p-6 rounded-[2rem] glass space-y-4 ${isKidMode ? 'border border-purple-100/50' : ''}`}>
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+          <div className="space-y-2 shrink-0">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Język</label>
+            <select
+              value={lang}
+              onChange={e => { setLang(e.target.value); setSelectedTranscript(null); }}
+              className="bg-white/50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-brand-500 font-semibold text-sm"
+            >
+              {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
+            </select>
+          </div>
+          <div className="flex-1">
+            <TranscriptPicker
+              userId={user.id}
+              lang={lang}
+              selectedId={selectedTranscript?.id || null}
+              onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {!selectedTranscript ? (
+        <div className="text-center py-36 glass rounded-[3rem] border-2 border-dashed border-slate-200/60 dark:border-slate-800/60">
+          <Play className="h-16 w-16 text-slate-300 mx-auto mb-6 opacity-20" />
+          <p className="text-slate-500 font-bold text-xl">Wybierz transkrypcję, aby uruchomić odtwarzacz</p>
+          <p className="text-slate-400 text-sm mt-2">Kliknij dowolne słowo aby zobaczyć tłumaczenie i zapisać do słówek</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+          {/* ── Left: Video + controls + current subtitle ── */}
+          <div className="space-y-4">
+            {/* YouTube player */}
+            <div
+              ref={playerDivRef}
+              className="w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl"
+            />
+
+            {/* Controls row */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setDualSubs(!dualSubs)}
+                disabled={translatingDual}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                  dualSubs
+                    ? (isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white')
+                    : 'glass border border-white/20 dark:border-white/10 hover:border-brand-500/40'
+                }`}
+              >
+                {translatingDual
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <span>🇵🇱</span>}
+                {dualSubs ? 'Ukryj tłumaczenie' : 'Podwójne napisy'}
+              </button>
+
+              {loadingSegs && (
+                <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Ładuję napisy...
+                </span>
+              )}
+              {segsError && !loadingSegs && segments.length === 0 && (
+                <span className="text-xs text-amber-500 font-medium">⚠ {segsError} — używam trybu tekstowego</span>
+              )}
+            </div>
+
+            {/* Current subtitle display */}
+            {currentSegIdx >= 0 && (
+              <motion.div
+                key={currentSegIdx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`p-5 rounded-2xl glass border text-center space-y-1.5 ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/10'}`}
+              >
+                <p className="text-base font-bold leading-snug">
+                  {segments[currentSegIdx].text.split(' ').map((w, i) => {
+                    const clean = w.replace(/[.,!?;:"""„()\[\]]/g, '');
+                    return (
+                      <span
+                        key={i}
+                        onClick={e => handleWordClick(w, e)}
+                        className={`cursor-pointer mr-1 inline-block transition-colors ${
+                          savedWords.has(clean)
+                            ? 'text-emerald-500 font-black'
+                            : 'hover:text-brand-500'
+                        }`}
+                      >
+                        {w}
+                      </span>
+                    );
+                  })}
+                </p>
+                {dualSubs && (
+                  <p className={`text-sm font-semibold ${segTranslations[currentSegIdx] ? 'text-brand-400' : 'text-slate-400 animate-pulse'}`}>
+                    {segTranslations[currentSegIdx] || (translatingDual ? 'Tłumaczę...' : '')}
+                  </p>
+                )}
+              </motion.div>
+            )}
+
+            {/* Saved words summary */}
+            {savedWords.size > 0 && (
+              <div className="flex items-center gap-2 flex-wrap px-1">
+                <span className="text-xs font-bold text-slate-400">Zapisane:</span>
+                {[...savedWords].slice(-8).map(w => (
+                  <span key={w} className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">{w}</span>
+                ))}
+                {savedWords.size > 8 && (
+                  <span className="text-xs text-slate-400">+{savedWords.size - 8} więcej</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Right: Scrollable transcript ── */}
+          <div
+            ref={transcriptRef}
+            className="h-[500px] xl:h-auto xl:max-h-[calc(100vh-280px)] overflow-y-auto rounded-2xl glass border border-white/20 dark:border-white/5 p-4"
+          >
+            <div className="flex items-start justify-between mb-4 px-1">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Transkrypcja</p>
+                <h3 className="font-black text-sm leading-tight mt-0.5 line-clamp-2">{selectedTranscript.title}</h3>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400 shrink-0 ml-2">
+                {segments.length > 0 ? `${segments.length} segm.` : 'tryb tekstowy'}
+              </span>
+            </div>
+
+            {segments.length > 0 ? (
+              <div className="space-y-0.5">
+                {segments.map((seg, i) => (
+                  <div
+                    key={i}
+                    ref={el => { segRefs.current[i] = el; }}
+                    onClick={e => { e.stopPropagation(); playerRef.current?.seekTo?.(seg.start, true); }}
+                    className={`px-3 py-2 rounded-xl cursor-pointer transition-all ${
+                      i === currentSegIdx
+                        ? (isKidMode
+                            ? 'bg-purple-500/15 border border-purple-400/40'
+                            : 'bg-brand-500/15 border border-brand-400/40')
+                        : 'hover:bg-white/10 dark:hover:bg-white/5 border border-transparent'
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-400 font-mono mr-2 select-none">{fmtTime(seg.start)}</span>
+                    {seg.text.split(' ').map((w, wi) => {
+                      const clean = w.replace(/[.,!?;:"""„()\[\]]/g, '');
+                      return (
+                        <span
+                          key={wi}
+                          onClick={e => handleWordClick(w, e)}
+                          className={`inline-block mr-1 cursor-pointer transition-colors text-sm ${
+                            savedWords.has(clean)
+                              ? 'text-emerald-500 font-bold'
+                              : i === currentSegIdx
+                                ? 'font-semibold hover:text-brand-500'
+                                : 'text-slate-600 dark:text-slate-300 hover:text-brand-500'
+                          }`}
+                        >
+                          {w}
+                        </span>
+                      );
+                    })}
+                    {dualSubs && segTranslations[i] && (
+                      <p className="text-[11px] text-brand-400 mt-0.5 italic">{segTranslations[i]}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : loadingSegs ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+                <Loader2 className="h-8 w-8 animate-spin opacity-40" />
+                <p className="text-sm font-medium">Pobieranie napisów z YouTube...</p>
+              </div>
+            ) : (
+              // Fallback: plain transcript, no timestamps
+              <div className="leading-relaxed text-sm px-1">
+                {plainWords.map((word, i) => {
+                  const clean = word.replace(/[.,!?;:"""„()\[\]]/g, '');
+                  return (
+                    <span
+                      key={i}
+                      onClick={e => handleWordClick(word, e)}
+                      className={`inline-block mr-1.5 mb-0.5 cursor-pointer transition-colors ${
+                        savedWords.has(clean)
+                          ? 'text-emerald-500 font-bold'
+                          : 'hover:text-brand-500 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {word}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Word popup ── */}
+      <AnimatePresence>
+        {popup && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.88, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.88, y: 8 }}
+            transition={{ duration: 0.15 }}
+            style={{ position: 'fixed', left: popup.x, top: popup.y - 130, zIndex: 60 }}
+            className="bg-slate-900/96 dark:bg-slate-950/98 text-white px-5 py-4 rounded-2xl shadow-2xl border border-white/15 w-[240px]"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPopup(null)}
+              className="absolute top-2 right-2 p-1 hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X className="h-3.5 w-3.5 opacity-60" />
+            </button>
+
+            <p className="font-black text-xl tracking-tight pr-6">{popup.word}</p>
+            <div className="min-h-[1.5rem] mt-1">
+              {popup.translation === null
+                ? <span className="text-slate-400 text-sm animate-pulse">Tłumaczę...</span>
+                : <span className={`font-bold text-base ${isKidMode ? 'text-purple-400' : 'text-brand-400'}`}>{popup.translation}</span>
+              }
+            </div>
+
+            <div className="flex gap-2 mt-3.5">
+              <button
+                onClick={saveToVocab}
+                disabled={!popup.translation || popup.saving || savedWords.has(popup.word)}
+                className={`flex-1 py-2 rounded-xl text-xs font-black transition-all disabled:opacity-40 ${
+                  savedWords.has(popup.word)
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : isKidMode
+                      ? 'bg-purple-500 text-white'
+                      : 'brand-gradient text-white'
+                }`}
+              >
+                {savedWords.has(popup.word) ? '✓ Zapisano' : popup.saving ? '...' : '+ Słówka'}
+              </button>
+              <button
+                onClick={saveAsFlashcard}
+                disabled={!popup.translation || popup.saving || savedWords.has(popup.word)}
+                className="flex-1 py-2 rounded-xl text-xs font-black glass border border-white/20 hover:border-brand-500/40 transition-all disabled:opacity-40"
+              >
+                {popup.saving ? '...' : '+ Fiszka'}
+              </button>
+              <button
+                onClick={() => speakWord(popup.word)}
+                className="px-3 py-2 rounded-xl glass border border-white/20 hover:border-brand-500/40 transition-all"
+              >
+                🔊
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -295,8 +295,49 @@ async function startServer() {
       console.log(`[FORMAT] id=${id} words=${raw.split(' ').length} paras=${transcript.split('\n\n').length}`);
       res.json(updated);
     } catch (error: any) {
-      console.error(`[FORMAT] error durationMs=${Date.now() - startedAt}`, error?.message || error);
+      console.error("[FORMAT] error", error?.message || error);
       res.status(500).json({ error: error?.message || "Błąd formatowania transkrypcji" });
+    }
+  });
+
+  // Transcript sources: Timed segments (fetched from Supadata with text=false, cached in DB)
+  app.get("/api/transcripts/:id/segments", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const source = await prisma.transcriptSource.findUnique({ where: { id } });
+      if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
+
+      // Return cached segments
+      if (source.segments) {
+        return res.json({ segments: source.segments });
+      }
+
+      // Fetch timed segments from Supadata (text=false returns [{text,start,dur}] array)
+      const apiKey = process.env.SUPADATA_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Brak klucza SUPADATA_API_KEY" });
+
+      console.log(`[SEGMENTS] fetch:start id=${id} videoId=${source.videoId}`);
+      const resp = await fetchWithTimeout(
+        `https://api.supadata.ai/v1/youtube/transcript?url=${encodeURIComponent(source.url)}&text=false`,
+        { headers: { "x-api-key": apiKey } },
+        20000
+      );
+
+      const data = await resp.json() as any;
+      if (!resp.ok) return res.status(500).json({ error: data?.message || "Błąd Supadata API" });
+
+      const segments = Array.isArray(data.content) ? data.content : [];
+      if (segments.length === 0) {
+        return res.status(404).json({ error: "Brak segmentów czasowych dla tego filmiku (brak napisów)" });
+      }
+
+      // Cache in DB
+      await prisma.transcriptSource.update({ where: { id }, data: { segments } });
+      console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length}`);
+      res.json({ segments });
+    } catch (error: any) {
+      console.error("[SEGMENTS] error:", error?.message || error);
+      res.status(500).json({ error: error?.message || "Błąd pobierania segmentów" });
     }
   });
 
@@ -425,17 +466,17 @@ async function startServer() {
   // Vocabulary: Add
   app.post("/api/vocabulary", async (req, res) => {
     try {
-      const { word, translation, lang, userId } = req.body;
+      const { word, translation, lang, userId, context, definition } = req.body;
       if (!word || !translation || !userId) return res.status(400).json({ error: "Brak danych" });
-      
+
       const newWord = await prisma.vocabWord.create({
-        data: { 
-          word, 
-          translation, 
-          lang, 
+        data: {
+          word,
+          translation,
+          lang,
           userId,
-          context: "",
-          definition: ""
+          context: context || "",
+          definition: definition || ""
         },
       });
       res.json(newWord);

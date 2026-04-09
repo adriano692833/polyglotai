@@ -4,7 +4,7 @@ export interface AuthUser {
   token: string;
 }
 
-export type TabId = 'dashboard' | 'practice' | 'reading' | 'sentences' | 'flashcards' | 'vocabulary' | 'challenge' | 'translator' | 'transcripts';
+export type TabId = 'dashboard' | 'practice' | 'reading' | 'sentences' | 'flashcards' | 'vocabulary' | 'challenge' | 'translator' | 'transcripts' | 'player';
 
 export interface Flashcard {
   id: string;
