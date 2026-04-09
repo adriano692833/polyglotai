@@ -1732,9 +1732,10 @@ function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKi
     window.speechSynthesis.speak(utterance);
   };
 
-  const translateWord = async (word: string) => {
+  const translateWord = async (word: string, sentenceContext?: string) => {
     try {
-      const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
+      const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
+      const prompt = `${ctx}Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko tłumaczenie pasujące do kontekstu, bez dodatkowego tekstu.`;
       const responseText = await requestAiText(prompt, false);
       return responseText.trim() || null;
     } catch (err) {
@@ -1742,32 +1743,32 @@ function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKi
     }
   };
 
-  const handleWordMouseEnter = (word: string, e: React.MouseEvent) => {
+  const handleWordMouseEnter = (word: string, e: React.MouseEvent, sentenceContext?: string) => {
     const x = e.clientX;
     const y = e.clientY;
-    
+
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    
+
     hoverTimeout.current = setTimeout(async () => {
       if (isTranslating.current) return;
-      
+
       const cleanWord = word.replace(/[.,!?;:]/g, '').trim();
       if (!cleanWord) return;
       const requestId = ++hoverRequestId.current;
       const normalizedWord = cleanWord.toLowerCase();
 
       // Check if word is in vocabulary first
-      const vocabMatch = result?.vocabulary?.find((v: any) => 
+      const vocabMatch = result?.vocabulary?.find((v: any) =>
         typeof v?.word === 'string' && v.word.toLowerCase() === normalizedWord
       );
-      
+
       if (vocabMatch) {
         if (hoverRequestId.current === requestId) {
           setHoveredWord({ word: cleanWord, translation: vocabMatch.translation, x, y });
         }
       } else {
         isTranslating.current = true;
-        const translation = await translateWord(cleanWord);
+        const translation = await translateWord(cleanWord, sentenceContext);
         if (hoverRequestId.current === requestId) {
           setHoveredWord({ word: cleanWord, translation, x, y });
         }
@@ -1883,14 +1884,14 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
                               e.stopPropagation();
                               speak(word.replace(/[.,!?;:]/g, ''), lang);
                             }}
-                            onMouseEnter={(e) => handleWordMouseEnter(word, e)}
+                            onMouseEnter={(e) => handleWordMouseEnter(word, e, item.original)}
                             onMouseLeave={handleWordMouseLeave}
                           >
                             {word}
                           </span>
                         ))}
                       </div>
-                      
+
                       <AnimatePresence>
                         {expandedSentences[si] && (
                           <motion.div
@@ -1995,7 +1996,7 @@ function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; is
     window.speechSynthesis.speak(utt);
   };
 
-  const handleWordMouseEnter = (word: string, e: React.MouseEvent) => {
+  const handleWordMouseEnter = (word: string, e: React.MouseEvent, sentenceContext?: string) => {
     const x = e.clientX;
     const y = e.clientY;
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
@@ -2006,7 +2007,8 @@ function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; is
       const reqId = ++hoverRequestId.current;
       isTranslating.current = true;
       try {
-        const t = await requestAiText(`Przetłumacz słowo "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem.`, false);
+        const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
+        const t = await requestAiText(`${ctx}Przetłumacz słowo "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem pasującym do kontekstu.`, false);
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: t.trim(), x, y });
       } catch {
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: null, x, y });
@@ -2093,7 +2095,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
                   key={wi}
                   className="inline-block mr-1.5 mb-1 cursor-pointer hover:text-brand-500 transition-colors"
                   onClick={() => speak(word.replace(/[.,!?;:"""„]/g, ''))}
-                  onMouseEnter={(e) => handleWordMouseEnter(word, e)}
+                  onMouseEnter={(e) => handleWordMouseEnter(word, e, s.original)}
                   onMouseLeave={handleWordMouseLeave}
                 >
                   {word}
@@ -2348,9 +2350,10 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
     window.speechSynthesis.speak(utterance);
   };
 
-  const translateWord = async (word: string): Promise<string | null> => {
+  const translateWord = async (word: string, sentenceContext?: string): Promise<string | null> => {
     try {
-      const prompt = `Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko samo tłumaczenie, bez dodatkowego tekstu.`;
+      const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
+      const prompt = `${ctx}Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko tłumaczenie pasujące do kontekstu, bez dodatkowego tekstu.`;
       const text = await requestAiText(prompt, false);
       return text.trim() || null;
     } catch {
@@ -2358,7 +2361,7 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
     }
   };
 
-  const handleWordMouseEnter = (word: string, e: React.MouseEvent) => {
+  const handleWordMouseEnter = (word: string, e: React.MouseEvent, sentenceContext?: string) => {
     const x = e.clientX;
     const y = e.clientY;
     if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
@@ -2368,7 +2371,7 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
       if (!clean) return;
       const requestId = ++hoverRequestId.current;
       isTranslating.current = true;
-      const translation = await translateWord(clean);
+      const translation = await translateWord(clean, sentenceContext);
       if (hoverRequestId.current === requestId) {
         setHoveredWord({ word: clean, translation, x, y });
       }
@@ -2454,7 +2457,7 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
                         key={wi}
                         className="hover:text-brand-500 cursor-pointer transition-colors inline-block mr-1.5 mb-1"
                         onClick={() => speak(word.replace(/[.,!?;:"""„]/g, ''))}
-                        onMouseEnter={(e) => handleWordMouseEnter(word, e)}
+                        onMouseEnter={(e) => handleWordMouseEnter(word, e, para)}
                         onMouseLeave={handleWordMouseLeave}
                       >
                         {word}
@@ -2694,15 +2697,17 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     setPopup({ word: clean, x, y, translation: null, saving: false });
 
     try {
+      const segCtx = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
+      const ctx = segCtx ? `Kontekst zdania: "${segCtx}"\n` : '';
       const t = await requestAiText(
-        `Przetłumacz słowo/wyrażenie "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem, bez żadnych dodatkowych słów.`,
+        `${ctx}Przetłumacz słowo/wyrażenie "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem pasującym do tego kontekstu.`,
         false
       );
       setPopup(p => p?.word === clean ? { ...p, translation: t.trim() } : p);
     } catch {
       setPopup(p => p?.word === clean ? { ...p, translation: '—' } : p);
     }
-  }, [lang]);
+  }, [lang, currentSegIdx, segments]);
 
   const saveToVocab = async () => {
     if (!popup?.translation || popup.saving) return;
@@ -2784,21 +2789,27 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
             />
 
             {/* Controls row */}
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setDualSubs(!dualSubs)}
-                disabled={translatingDual}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={dualSubs}
+                  disabled={translatingDual}
+                  onChange={e => setDualSubs(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-all ${
                   dualSubs
-                    ? (isKidMode ? 'bg-purple-500 text-white' : 'brand-gradient text-white')
-                    : 'glass border border-white/20 dark:border-white/10 hover:border-brand-500/40'
-                }`}
-              >
-                {translatingDual
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <span>🇵🇱</span>}
-                {dualSubs ? 'Ukryj tłumaczenie' : 'Podwójne napisy'}
-              </button>
+                    ? (isKidMode ? 'bg-purple-500 border-purple-500' : 'bg-brand-500 border-brand-500')
+                    : 'border-slate-300 dark:border-slate-600 group-hover:border-brand-400'
+                }`}>
+                  {dualSubs && <Check className="h-3 w-3 text-white" />}
+                </div>
+                <span className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  🇵🇱 Tłumaczenia
+                  {translatingDual && <Loader2 className="h-3 w-3 animate-spin text-brand-500" />}
+                </span>
+              </label>
 
               {loadingSegs && (
                 <span className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -2838,8 +2849,8 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
                   })}
                 </p>
                 {dualSubs && (
-                  <p className={`text-sm font-semibold ${segTranslations[currentSegIdx] ? 'text-brand-400' : 'text-slate-400 animate-pulse'}`}>
-                    {segTranslations[currentSegIdx] || (translatingDual ? 'Tłumaczę...' : '')}
+                  <p className={`text-xs sm:text-sm font-medium mt-1 italic ${segTranslations[currentSegIdx] ? 'text-brand-300' : 'text-slate-500 animate-pulse'}`}>
+                    {segTranslations[currentSegIdx] || '…'}
                   </p>
                 )}
               </motion.div>
@@ -2915,8 +2926,10 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
                         </span>
                       );
                     })}
-                    {dualSubs && segTranslations[i] && (
-                      <p className="text-[11px] text-brand-400 mt-0.5 italic">{segTranslations[i]}</p>
+                    {dualSubs && (
+                      <p className={`text-[11px] mt-1 italic leading-snug ${segTranslations[i] ? 'text-brand-400 dark:text-brand-300' : 'text-slate-400 animate-pulse'}`}>
+                        {segTranslations[i] || '…'}
+                      </p>
                     )}
                   </div>
                 ))}
