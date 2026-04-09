@@ -286,6 +286,15 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isKidMode, setIsKidMode] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [globalSource, setGlobalSource] = useState<TranscriptSource | null>(() => {
+    try { return JSON.parse(localStorage.getItem('pg_global_source') || 'null'); } catch { return null; }
+  });
+
+  const setGlobalSourceAndPersist = (src: TranscriptSource | null) => {
+    setGlobalSource(src);
+    if (src) localStorage.setItem('pg_global_source', JSON.stringify(src));
+    else localStorage.removeItem('pg_global_source');
+  };
 
   useEffect(() => {
     if (isDarkMode) {
@@ -456,8 +465,8 @@ export default function App() {
         </header>
 
       {/* Navigation */}
-      <nav className="mx-auto w-full max-w-6xl px-6 pt-5 pb-2">
-        <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-none">
+      <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 pt-4 pb-2">
+        <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-3 scrollbar-none">
           <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Moje Wyniki" : "Dashboard"} isKidMode={isKidMode} />
           <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
           <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label={isKidMode ? "Czytanie" : "Czytanie"} isKidMode={isKidMode} />
@@ -470,6 +479,27 @@ export default function App() {
         </div>
       </nav>
 
+      {/* Global Source Bar */}
+      {globalSource && (
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 pb-2">
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold border ${
+            isKidMode
+              ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200/60 dark:border-purple-700/30 text-purple-700 dark:text-purple-300'
+              : 'bg-brand-500/8 border-brand-500/20 text-brand-600 dark:text-brand-400'
+          }`}>
+            <span className="text-sm">📹</span>
+            <span className="truncate flex-1">Aktywne źródło: <span className="font-black">{globalSource.title}</span></span>
+            <button
+              onClick={() => setGlobalSourceAndPersist(null)}
+              className="shrink-0 p-1 hover:bg-white/20 rounded-lg transition-colors opacity-60 hover:opacity-100"
+              title="Usuń globalne źródło"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-2">
         <AnimatePresence mode="wait">
@@ -481,14 +511,14 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'dashboard' && <Dashboard user={user} isKidMode={isKidMode} />}
-            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} />}
-            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} />}
-            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} />}
+            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} />}
+            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} />}
+            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} />}
             {activeTab === 'flashcards' && <Flashcards user={user} isKidMode={isKidMode} />}
             {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} />}
             {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} />}
             {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} />}
-            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} />}
+            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -508,7 +538,7 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
   return (
     <button
       onClick={() => onClick(id)}
-      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
         active
           ? isKidMode
             ? 'bg-white dark:bg-purple-900/40 shadow-md text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/40'
@@ -788,13 +818,13 @@ function StatCard({ icon, label, value, subValue, barColor, progress }: any) {
   );
 }
 
-function Practice({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function Practice({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
   const [activeSubTab, setActiveSubTab] = useState<'write' | 'translate'>('write');
 
   return (
     <div className="space-y-8">
       <div className="flex gap-2 p-1.5 glass rounded-2xl w-fit border border-white/20 dark:border-white/5">
-        <button 
+        <button
           onClick={() => setActiveSubTab('write')}
           className={`px-8 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-300 ${activeSubTab === 'write' ? 'bg-white dark:bg-slate-800 shadow-xl text-slate-900 dark:text-white scale-105' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
@@ -809,15 +839,15 @@ function Practice({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
       </div>
 
       {activeSubTab === 'write' ? (
-        <WritePractice user={user} isKidMode={isKidMode} />
+        <WritePractice user={user} isKidMode={isKidMode} globalSource={globalSource} />
       ) : (
-        <TranslatePractice user={user} isKidMode={isKidMode} />
+        <TranslatePractice user={user} isKidMode={isKidMode} globalSource={globalSource} />
       )}
     </div>
   );
 }
 
-function WritePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function WritePractice({ user, isKidMode, globalSource: _gs }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
   const [text, setText] = useState('');
   const [lang, setLang] = useState('en');
   const [checking, setChecking] = useState(false);
@@ -962,7 +992,7 @@ Tekst ucznia: "${text}"`;
   );
 }
 
-function TranslatePractice({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function TranslatePractice({ user, isKidMode, globalSource: _gs }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
   const [lang, setLang] = useState('en');
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
@@ -1637,8 +1667,8 @@ Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
   );
 }
 
-function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
-  const [lang, setLang] = useState('en');
+function Reading({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
+  const [lang, setLang] = useState(() => globalSource?.lang || 'en');
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [sentenceCount, setSentenceCount] = useState(10);
@@ -1646,7 +1676,7 @@ function Reading({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
   const [result, setResult] = useState<any>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
   const [expandedSentences, setExpandedSentences] = useState<Record<number, boolean>>({});
-  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(globalSource || null);
   const hoverTimeout = useRef<any>(null);
   const isTranslating = useRef<boolean>(false);
   const hoverRequestId = useRef(0);
@@ -1906,14 +1936,53 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function Sentences({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
-  const [lang, setLang] = useState('en');
+function Sentences({ user, isKidMode, globalSource }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null }) {
+  const [lang, setLang] = useState(() => globalSource?.lang || 'en');
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
   const [sentences, setSentences] = useState<any[]>([]);
   const [showTranslations, setShowTranslations] = useState(true);
-  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(globalSource || null);
+  const [hoveredWord, setHoveredWord] = useState<{ word: string; translation: string | null; x: number; y: number } | null>(null);
+  const hoverTimeout = useRef<any>(null);
+  const hoverRequestId = useRef(0);
+  const isTranslating = useRef(false);
+
+  const speak = (text: string) => {
+    if (!window.speechSynthesis) return;
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = lang;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utt);
+  };
+
+  const handleWordMouseEnter = (word: string, e: React.MouseEvent) => {
+    const x = e.clientX;
+    const y = e.clientY;
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverTimeout.current = setTimeout(async () => {
+      if (isTranslating.current) return;
+      const clean = word.replace(/[.,!?;:"""„]/g, '').trim();
+      if (!clean) return;
+      const reqId = ++hoverRequestId.current;
+      isTranslating.current = true;
+      try {
+        const t = await requestAiText(`Przetłumacz słowo "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem.`, false);
+        if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: t.trim(), x, y });
+      } catch {
+        if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: null, x, y });
+      } finally {
+        isTranslating.current = false;
+      }
+    }, 350);
+  };
+
+  const handleWordMouseLeave = () => {
+    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+    hoverRequestId.current++;
+    setHoveredWord(null);
+  };
 
   const generate = async () => {
     setGenerating(true);
@@ -1929,7 +1998,6 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
 [
   {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
 ]`;
-
       const aiText = await requestAiText(prompt, true);
       const data = parseAiJson<any[]>(aiText, []);
       setSentences(data);
@@ -1941,68 +2009,88 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className={`text-2xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : ''}`}>
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${isKidMode ? 'text-purple-600' : ''}`}>
           {isKidMode ? "Zabawa ze Zdaniami! 💬" : "Budowanie Zdań"}
         </h2>
-        <div className="flex gap-3">
-           <button 
-            onClick={() => setShowTranslations(!showTranslations)}
-            className={`px-6 py-2.5 rounded-2xl text-xs font-black transition-all glass border ${showTranslations ? 'bg-brand-500/10 text-brand-500 border-brand-500/20' : 'bg-white/5 text-slate-500 border-white/10'}`}
-          >
-            {showTranslations ? "Ukryj tłumaczenia" : "Pokaż tłumaczenia"}
-          </button>
-        </div>
+        <button
+          onClick={() => setShowTranslations(!showTranslations)}
+          className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-2xl text-xs font-black transition-all glass border ${showTranslations ? 'bg-brand-500/10 text-brand-500 border-brand-500/20' : 'bg-white/5 text-slate-500 border-white/10'}`}
+        >
+          {showTranslations ? "Ukryj tłumaczenia" : "Pokaż tłumaczenia"}
+        </button>
       </div>
 
-      <div className={`p-10 rounded-[2.5rem] border shadow-2xl space-y-8 transition-all glass ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : 'border-white/20 dark:border-white/5'}`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-6 py-4 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
+      <div className={`p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border shadow-2xl space-y-6 glass ${isKidMode ? 'border-purple-100 shadow-purple-100/50' : 'border-white/20 dark:border-white/5'}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <select value={lang} onChange={(e) => setLang(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-4 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
             {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
           </select>
-          <select value={level} onChange={(e) => setLevel(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-6 py-4 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
+          <select value={level} onChange={(e) => setLevel(e.target.value)} className="glass border border-white/20 dark:border-white/5 rounded-2xl px-4 py-3 outline-none font-bold text-sm focus:ring-2 focus:ring-brand-500">
             {CEFR_LEVELS.map(l => <option key={l.code} value={l.code}>{l.code.toUpperCase()} — {l.name}</option>)}
           </select>
         </div>
-        <TranscriptPicker
-          userId={user.id}
-          lang={lang}
-          selectedId={selectedTranscript?.id || null}
-          onSelect={setSelectedTranscript}
-        />
+        <TranscriptPicker userId={user.id} lang={lang} selectedId={selectedTranscript?.id || null} onSelect={setSelectedTranscript} />
         <TopicSelector value={topic} onChange={setTopic} isKidMode={isKidMode} disabled={!!selectedTranscript} transcriptTitle={selectedTranscript?.title} />
         <button
           onClick={generate}
           disabled={generating}
-          className={`w-full py-5 rounded-2xl font-black shadow-2xl transition-all flex items-center justify-center gap-4 disabled:opacity-50 transform active:scale-[0.98] ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}
+          className={`w-full py-4 sm:py-5 rounded-2xl font-black shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 transform active:scale-[0.98] ${isKidMode ? 'brand-gradient text-white' : 'brand-gradient text-white brand-shadow'}`}
         >
-          {generating ? <Loader2 className="h-7 w-7 animate-spin" /> : <Sparkles className="h-7 w-7" />}
-          <span className="text-xl">{isKidMode ? "Stwórz zdania! ✨" : "Generuj zdania"}</span>
+          {generating ? <Loader2 className="h-6 w-6 animate-spin" /> : <Sparkles className="h-6 w-6" />}
+          <span className="text-lg sm:text-xl">{isKidMode ? "Stwórz zdania! ✨" : "Generuj zdania"}</span>
         </button>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 sm:gap-6">
         {sentences.map((s, i) => (
-          <motion.div 
+          <motion.div
             key={i}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className={`p-8 rounded-[2rem] border shadow-xl transition-all glass hover:shadow-2xl hover:-translate-y-1 ${isKidMode ? 'border-purple-50 hover:border-purple-200' : 'border-white/20 dark:border-white/5'}`}
+            className={`p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border shadow-xl transition-all glass hover:shadow-2xl hover:-translate-y-0.5 ${isKidMode ? 'border-purple-50 hover:border-purple-200' : 'border-white/20 dark:border-white/5'}`}
           >
-            <p className="text-2xl font-black tracking-tight mb-4 leading-relaxed">{s.original}</p>
+            <div className="text-lg sm:text-2xl font-black tracking-tight mb-4 leading-relaxed">
+              {s.original?.split(' ').map((word: string, wi: number) => (
+                <span
+                  key={wi}
+                  className="inline-block mr-1.5 mb-1 cursor-pointer hover:text-brand-500 transition-colors"
+                  onClick={() => speak(word.replace(/[.,!?;:"""„]/g, ''))}
+                  onMouseEnter={(e) => handleWordMouseEnter(word, e)}
+                  onMouseLeave={handleWordMouseLeave}
+                >
+                  {word}
+                </span>
+              ))}
+            </div>
             <AnimatePresence>
               {showTranslations && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                  <p className="text-lg text-brand-500 font-bold mb-3 tracking-tight">{s.translation}</p>
-                  <p className="text-sm text-slate-400 font-medium italic leading-relaxed">{s.explanation}</p>
+                  <p className="text-base sm:text-lg text-brand-500 font-bold mb-2 tracking-tight">{s.translation}</p>
+                  <p className="text-xs sm:text-sm text-slate-400 font-medium italic leading-relaxed">{s.explanation}</p>
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
         ))}
       </div>
+
+      {/* Word hover tooltip */}
+      <AnimatePresence>
+        {hoveredWord && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            style={{ position: 'fixed', left: Math.min(hoveredWord.x, window.innerWidth - 200), top: hoveredWord.y - 52, zIndex: 50 }}
+            className="glass bg-slate-900/90 text-white px-4 py-2 rounded-xl shadow-2xl text-sm font-bold tracking-tight pointer-events-none border border-white/20"
+          >
+            {hoveredWord.translation || '...'}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2162,7 +2250,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function TranscriptHub({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }) {
+function TranscriptHub({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
   const [mode, setMode] = useState<'read' | 'play'>('play');
   return (
     <div className="space-y-4">
@@ -2170,7 +2258,7 @@ function TranscriptHub({ user, isKidMode }: { user: AuthUser; isKidMode: boolean
       <div className="flex gap-2 p-1 rounded-2xl glass w-fit border border-white/20 dark:border-white/5">
         <button
           onClick={() => setMode('play')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
             mode === 'play'
               ? isKidMode ? 'bg-purple-500 text-white shadow-md' : 'brand-gradient text-white shadow-md'
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
@@ -2180,7 +2268,7 @@ function TranscriptHub({ user, isKidMode }: { user: AuthUser; isKidMode: boolean
         </button>
         <button
           onClick={() => setMode('read')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
             mode === 'read'
               ? isKidMode ? 'bg-purple-500 text-white shadow-md' : 'brand-gradient text-white shadow-md'
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
@@ -2189,12 +2277,14 @@ function TranscriptHub({ user, isKidMode }: { user: AuthUser; isKidMode: boolean
           <BookOpen className="h-3.5 w-3.5" /> Czytanie
         </button>
       </div>
-      {mode === 'play' ? <VideoPlayer user={user} isKidMode={isKidMode} /> : <TranscriptViewer user={user} isKidMode={isKidMode} />}
+      {mode === 'play'
+        ? <VideoPlayer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} />
+        : <TranscriptViewer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} />}
     </div>
   );
 }
 
-function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function TranscriptViewer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
   const [lang, setLang] = useState('en');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
@@ -2289,7 +2379,7 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
           userId={user.id}
           lang={lang}
           selectedId={selectedTranscript?.id || null}
-          onSelect={setSelectedTranscript}
+          onSelect={t => { setSelectedTranscript(t); onSourceChange?.(t); }}
         />
       </div>
 
@@ -2380,7 +2470,7 @@ function TranscriptViewer({ user, isKidMode }: { user: AuthUser, isKidMode: bool
 // ─────────────────────────────────────────────────────────────────────────────
 // Language Reactor-style Video Player tab
 // ─────────────────────────────────────────────────────────────────────────────
-function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }) {
+function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void }) {
   const [lang, setLang] = useState('en');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -2643,7 +2733,7 @@ function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }
               userId={user.id}
               lang={lang}
               selectedId={selectedTranscript?.id || null}
-              onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); }}
+              onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); onSourceChange?.(t); }}
             />
           </div>
         </div>
@@ -2656,7 +2746,7 @@ function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }
           <p className="text-slate-400 text-sm mt-2">Kliknij dowolne słowo aby zobaczyć tłumaczenie i zapisać do słówek</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* ── Left: Video + controls + current subtitle ── */}
           <div className="space-y-4">
@@ -2745,7 +2835,7 @@ function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }
           {/* ── Right: Scrollable transcript ── */}
           <div
             ref={transcriptRef}
-            className="h-[500px] xl:h-auto xl:max-h-[calc(100vh-280px)] overflow-y-auto rounded-2xl glass border border-white/20 dark:border-white/5 p-4"
+            className="h-[320px] sm:h-[420px] lg:h-auto lg:max-h-[calc(100vh-280px)] overflow-y-auto rounded-2xl glass border border-white/20 dark:border-white/5 p-4"
           >
             <div className="flex items-start justify-between mb-4 px-1">
               <div>
@@ -2835,8 +2925,8 @@ function VideoPlayer({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.88, y: 8 }}
             transition={{ duration: 0.15 }}
-            style={{ position: 'fixed', left: popup.x, top: popup.y - 130, zIndex: 60 }}
-            className="bg-slate-900/96 dark:bg-slate-950/98 text-white px-5 py-4 rounded-2xl shadow-2xl border border-white/15 w-[240px]"
+            style={{ position: 'fixed', left: Math.min(Math.max(popup.x, 8), window.innerWidth - 248), top: Math.max(popup.y - 140, 8), zIndex: 60 }}
+            className="bg-slate-900/96 dark:bg-slate-950/98 text-white px-4 sm:px-5 py-4 rounded-2xl shadow-2xl border border-white/15 w-[240px]"
             onClick={e => e.stopPropagation()}
           >
             <button
