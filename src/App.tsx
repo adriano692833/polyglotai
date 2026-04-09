@@ -2791,6 +2791,24 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     [selectedTranscript?.id]
   );
 
+  // For subtitle overlay: combine all fragments from last sentence boundary up to current segment
+  const subtitleWindow = useMemo(() => {
+    if (currentSegIdx < 0 || segments.length === 0) return { text: '', translation: '' };
+    // Walk back to find sentence start (prev segment ending with . ! ?)
+    let start = currentSegIdx;
+    while (start > 0 && !/[.!?]\s*$/.test(segments[start - 1].text) && currentSegIdx - start < 6) {
+      start--;
+    }
+    const text = segments.slice(start, currentSegIdx + 1).map(s => s.text).join(' ');
+    // Use the best (longest) translation available in the window
+    let translation = '';
+    for (let i = currentSegIdx; i >= start; i--) {
+      const t = segTranslations[i];
+      if (t && t.length > translation.length) translation = t;
+    }
+    return { text, translation };
+  }, [currentSegIdx, segments, segTranslations]);
+
   return (
     <div className="space-y-6 pb-24" onClick={() => setPopup(null)}>
       {/* ── Settings bar ── */}
@@ -2863,7 +2881,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
                 className={`p-5 rounded-2xl glass border text-center space-y-1.5 ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/10'}`}
               >
                 <p className="text-base font-bold leading-snug">
-                  {segments[currentSegIdx].text.split(' ').map((w, i) => {
+                  {subtitleWindow.text.split(' ').map((w, i) => {
                     const clean = w.replace(/[.,!?;:"""„()\[\]]/g, '');
                     return (
                       <span
@@ -2881,8 +2899,8 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
                   })}
                 </p>
                 {dualSubs && (
-                  <p className={`text-xs sm:text-sm font-medium mt-1 italic ${segTranslations[currentSegIdx] ? 'text-brand-300' : 'text-slate-500 animate-pulse'}`}>
-                    {segTranslations[currentSegIdx] || '…'}
+                  <p className={`text-xs sm:text-sm font-medium mt-1 italic ${subtitleWindow.translation ? 'text-brand-300' : 'text-slate-500 animate-pulse'}`}>
+                    {subtitleWindow.translation || '…'}
                   </p>
                 )}
               </motion.div>
