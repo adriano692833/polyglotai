@@ -466,8 +466,7 @@ export default function App() {
           <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label={isKidMode ? "Słówka" : "Słówka"} isKidMode={isKidMode} />
           <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label={isKidMode ? "Wyzwanie" : "Wyzwanie"} isKidMode={isKidMode} />
           <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label={isKidMode ? "Tłumacz" : "Tłumacz"} isKidMode={isKidMode} />
-          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="Transkrypcje" isKidMode={isKidMode} />
-          <NavButton id="player" active={activeTab === 'player'} onClick={setActiveTab} icon={<Play className="h-4 w-4" />} label="Odtwarzacz" isKidMode={isKidMode} />
+          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
         </div>
       </nav>
 
@@ -489,8 +488,7 @@ export default function App() {
             {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} />}
             {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} />}
             {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} />}
-            {activeTab === 'transcripts' && <TranscriptViewer user={user} isKidMode={isKidMode} />}
-            {activeTab === 'player' && <VideoPlayer user={user} isKidMode={isKidMode} />}
+            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -2160,6 +2158,38 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function TranscriptHub({ user, isKidMode }: { user: AuthUser; isKidMode: boolean }) {
+  const [mode, setMode] = useState<'read' | 'play'>('play');
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex gap-2 p-1 rounded-2xl glass w-fit border border-white/20 dark:border-white/5">
+        <button
+          onClick={() => setMode('play')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            mode === 'play'
+              ? isKidMode ? 'bg-purple-500 text-white shadow-md' : 'brand-gradient text-white shadow-md'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+        >
+          <Play className="h-3.5 w-3.5" /> Odtwarzacz
+        </button>
+        <button
+          onClick={() => setMode('read')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            mode === 'read'
+              ? isKidMode ? 'bg-purple-500 text-white shadow-md' : 'brand-gradient text-white shadow-md'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+        >
+          <BookOpen className="h-3.5 w-3.5" /> Czytanie
+        </button>
+      </div>
+      {mode === 'play' ? <VideoPlayer user={user} isKidMode={isKidMode} /> : <TranscriptViewer user={user} isKidMode={isKidMode} />}
     </div>
   );
 }
