@@ -628,27 +628,71 @@ async function startServer() {
     try {
       const { userId } = req.query;
       if (!userId) return res.status(400).json({ error: "Brak userId" });
+      const uid = String(userId);
 
-      const totalPractices = await prisma.writingPractice.count({ where: { userId: String(userId) } });
-      const scoreResult = await prisma.writingPractice.aggregate({
-        where: { userId: String(userId) },
-        _avg: { score: true },
-        _min: { score: true },
-        _max: { score: true },
+      const [totalPractices, scoreResult, vocabCount, flashcardCount, recentRaw, userPoints] = await Promise.all([
+        prisma.writingPractice.count({ where: { userId: uid } }),
+        prisma.writingPractice.aggregate({
+          where: { userId: uid },
+          _avg: { score: true },
+          _min: { score: true },
+          _max: { score: true },
+        }),
+        prisma.vocabWord.count({ where: { userId: uid } }),
+        prisma.flashcard.count({ where: { userId: uid } }),
+        prisma.writingPractice.findMany({
+          where: { userId: uid },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { score: true, targetLang: true, createdAt: true, mistakes: true },
+        }),
+        prisma.userPoints.findUnique({ where: { userId: uid } }),
+      ]);
+
+      // Language breakdown
+      const languages: Record<string, number> = {};
+      recentRaw.forEach(p => { languages[p.targetLang] = (languages[p.targetLang] || 0) + 1; });
+
+      // Error categories from stored mistakes JSON
+      const errorCategories: Record<string, number> = {};
+      recentRaw.forEach(p => {
+        try {
+          const mistakes = JSON.parse(p.mistakes || '[]');
+          if (Array.isArray(mistakes)) {
+            mistakes.forEach((m: any) => {
+              if (m?.category) errorCategories[m.category] = (errorCategories[m.category] || 0) + 1;
+            });
+          }
+        } catch {}
       });
+
+      // Score history oldest→newest for chart
+      const scoreHistory = [...recentRaw].reverse().map(p => ({
+        score: p.score,
+        lang: p.targetLang,
+        date: p.createdAt,
+      }));
+
+      // Recent practices newest first
+      const recentPractices = recentRaw.slice(0, 5).map(p => ({
+        score: p.score,
+        lang: p.targetLang,
+        date: p.createdAt,
+        mistakeCount: (() => { try { return JSON.parse(p.mistakes || '[]').length; } catch { return 0; } })(),
+      }));
 
       res.json({
         totalPractices,
         averageScore: Math.round(scoreResult._avg.score || 0),
         minScore: scoreResult._min.score || 0,
         maxScore: scoreResult._max.score || 0,
-        streak: 0, // Placeholder
-        vocabCount: await prisma.vocabWord.count({ where: { userId: String(userId) } }),
-        flashcards: {}, // Placeholder
-        scoreHistory: [],
-        recentPractices: [],
-        languages: {},
-        errorCategories: {}
+        streak: userPoints?.streak || 0,
+        vocabCount,
+        flashcardCount,
+        scoreHistory,
+        recentPractices,
+        languages,
+        errorCategories,
       });
     } catch (error) {
       res.status(500).json({ error: "Błąd statystyk" });

@@ -34,22 +34,6 @@ async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
   } finally {
     clearTimeout(timeout);
   }
-  const res = await fetch('/api/ai/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, isJson })
-  });
-
-  const response = await res.json();
-  if (!res.ok) {
-    throw new Error(response?.error || 'Błąd komunikacji z AI');
-  }
-
-  if (typeof response?.text !== 'string') {
-    throw new Error('Niepoprawna odpowiedź AI');
-  }
-
-  return response.text;
 }
 
 function parseAiJson<T>(text: string, fallback: T): T {
@@ -409,9 +393,19 @@ export default function App() {
             </div>
 
             {/* Right controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
 
-              {/* Theme toggle — animated switch */}
+              {/* Global language selector */}
+              <select
+                value={globalLang}
+                onChange={e => setGlobalLang(e.target.value)}
+                title="Język nauki"
+                className="glass border border-white/20 dark:border-white/5 rounded-xl px-2 sm:px-3 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+              >
+                {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>)}
+              </select>
+
+              {/* Theme toggle */}
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 aria-label={isDarkMode ? 'Włącz tryb jasny' : 'Włącz tryb ciemny'}
@@ -434,10 +428,10 @@ export default function App() {
                 </span>
               </button>
 
-              {/* Kid mode toggle */}
+              {/* Kid mode toggle — hidden on mobile */}
               <button
                 onClick={() => setIsKidMode(!isKidMode)}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${
+                className={`hidden sm:flex px-4 py-1.5 rounded-full text-xs font-semibold transition-all hover:scale-105 active:scale-95 ${
                   isKidMode
                     ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50'
                     : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-white/[0.06]'
@@ -446,8 +440,8 @@ export default function App() {
                 {isKidMode ? '🧒 Dziecko' : '🎓 Dorosły'}
               </button>
 
-              {/* User badge */}
-              <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-sm font-medium ${
+              {/* User badge — hidden on mobile */}
+              <div className={`hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-sm font-medium ${
                 isKidMode
                   ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/40 text-purple-700 dark:text-purple-300'
                   : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/80 dark:border-white/[0.06] text-slate-700 dark:text-slate-300'
@@ -468,27 +462,17 @@ export default function App() {
         </header>
 
       {/* Navigation */}
-      <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 sm:gap-2 overflow-x-auto pb-3 scrollbar-none flex-1">
-            <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Moje Wyniki" : "Dashboard"} isKidMode={isKidMode} />
-            <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
-            <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label="Czytanie" isKidMode={isKidMode} />
-            <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label="Zdania" isKidMode={isKidMode} />
-            <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Karty" : "Fiszki"} isKidMode={isKidMode} />
-            <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label="Słówka" isKidMode={isKidMode} />
-            <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label="Wyzwanie" isKidMode={isKidMode} />
-            <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label="Tłumacz" isKidMode={isKidMode} />
-            <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
-          </div>
-          {/* Global language selector */}
-          <select
-            value={globalLang}
-            onChange={e => setGlobalLang(e.target.value)}
-            className="shrink-0 mb-3 glass border border-white/20 dark:border-white/5 rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm font-bold outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-          </select>
+      <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 pt-3 pb-1">
+        <div className="flex flex-wrap gap-1 sm:gap-1.5">
+          <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Wyniki" : "Dashboard"} isKidMode={isKidMode} />
+          <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
+          <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label="Czytanie" isKidMode={isKidMode} />
+          <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label="Zdania" isKidMode={isKidMode} />
+          <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Karty" : "Fiszki"} isKidMode={isKidMode} />
+          <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label="Słówka" isKidMode={isKidMode} />
+          <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label="Wyzwanie" isKidMode={isKidMode} />
+          <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label="Tłumacz" isKidMode={isKidMode} />
+          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
         </div>
       </nav>
 
@@ -552,7 +536,7 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
     <button
       onClick={() => onClick(id)}
       title={label}
-      className={`flex items-center gap-0 sm:gap-2 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+      className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap ${
         active
           ? isKidMode
             ? 'bg-white dark:bg-purple-900/40 shadow-md text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/40'
@@ -560,8 +544,8 @@ function NavButton({ id, active, onClick, icon, label, isKidMode }: { id: TabId,
           : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/70 dark:hover:bg-slate-800/40 border border-transparent'
       }`}
     >
-      <span className={active ? (isKidMode ? 'text-purple-500' : 'text-brand-500') : 'opacity-60'}>{icon}</span>
-      <span className="hidden sm:inline">{label}</span>
+      <span className={`shrink-0 ${active ? (isKidMode ? 'text-purple-500' : 'text-brand-500') : 'opacity-60'}`}>{icon}</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -715,87 +699,161 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
           barColor="bg-gradient-to-t from-brand-600 to-red-500"
           progress={Math.min((stats?.streak || 0) * 10, 100)}
         />
-        <StatCard 
-          icon={<Book className="h-5 w-5 text-purple-500" />} 
-          label="Teksty" 
-          value={`${stats?.totalPractice || 0}`} 
+        <StatCard
+          icon={<Book className="h-5 w-5 text-purple-500" />}
+          label="Teksty"
+          value={`${stats?.totalPractices || 0}`}
           subValue="napisane i sprawdzone"
           barColor="bg-gradient-to-t from-purple-600 to-indigo-500"
-          progress={Math.min((stats?.totalPractice || 0) * 5, 100)}
+          progress={Math.min((stats?.totalPractices || 0) * 5, 100)}
         />
-        <StatCard 
-          icon={<BarChart3 className="h-5 w-5 text-emerald-500" />} 
-          label="Średni wynik" 
-          value={`${Math.round(stats?.avgScore || 0)}`} 
-          subValue={`min 0 / max 100`}
+        <StatCard
+          icon={<BarChart3 className="h-5 w-5 text-emerald-500" />}
+          label="Średni wynik"
+          value={`${stats?.averageScore || 0}`}
+          subValue={`min ${stats?.minScore || 0} / max ${stats?.maxScore || 0}`}
           barColor="bg-gradient-to-t from-emerald-600 to-teal-500"
-          progress={stats?.avgScore || 0}
+          progress={stats?.averageScore || 0}
         />
-        <StatCard 
-          icon={<Layers className="h-5 w-5 text-blue-500" />} 
-          label="Fiszki" 
-          value={`${stats?.totalFlashcards || 0}`} 
-          subValue="słówek w banku"
+        <StatCard
+          icon={<Layers className="h-5 w-5 text-blue-500" />}
+          label="Fiszki"
+          value={`${stats?.flashcardCount || 0}`}
+          subValue={`+ ${stats?.vocabCount || 0} słówek`}
           barColor="bg-gradient-to-t from-blue-600 to-cyan-500"
-          progress={Math.min((stats?.totalFlashcards || 0) * 2, 100)}
+          progress={Math.min((stats?.flashcardCount || 0) * 2, 100)}
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="glass rounded-[2.5rem] p-10 h-80 flex flex-col">
-          <div className="flex items-center gap-3 mb-8">
+        {/* Score history chart */}
+        <div className="glass rounded-[2.5rem] p-8 h-72 flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
             <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20">
-              <BarChart3 className="h-6 w-6 text-emerald-500" />
+              <BarChart3 className="h-5 w-5 text-emerald-500" />
             </div>
-            <h3 className="font-extrabold text-xl tracking-tight">Postęp — ostatnie 30 dni</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">Ostatnie wyniki</h3>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-4">
-            <div className="h-16 w-16 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center">
-              <Plus className="h-8 w-8 opacity-20" />
+          {Array.isArray(stats?.scoreHistory) && stats.scoreHistory.length > 0 ? (
+            <div className="flex-1 flex items-end gap-1.5">
+              {stats.scoreHistory.slice(-12).map((s: any, i: number) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                  <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{s.score}</span>
+                  <div
+                    className={`w-full rounded-t-lg transition-all ${s.score >= 80 ? 'bg-emerald-400' : s.score >= 60 ? 'bg-yellow-400' : 'bg-red-400'}`}
+                    style={{ height: `${Math.max(s.score, 4)}%` }}
+                  />
+                </div>
+              ))}
             </div>
-            <p className="font-semibold">Brak danych — zacznij pisać!</p>
-          </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
+              <Plus className="h-10 w-10 opacity-15" />
+              <p className="font-semibold">Brak danych — zacznij ćwiczyć!</p>
+            </div>
+          )}
         </div>
-        <div className="glass rounded-[2.5rem] p-10 h-80 flex flex-col">
-          <div className="flex items-center gap-3 mb-8">
+
+        {/* Error categories */}
+        <div className="glass rounded-[2.5rem] p-8 h-72 flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
             <div className="p-3 rounded-2xl bg-pink-50 dark:bg-pink-900/20">
-              <Check className="h-6 w-6 text-pink-500" />
+              <Check className="h-5 w-5 text-pink-500" />
             </div>
-            <h3 className="font-extrabold text-xl tracking-tight">Kategorie błędów</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">Kategorie błędów</h3>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-4">
-            <div className="h-16 w-16 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center">
-              <Check className="h-8 w-8 opacity-20" />
+          {Object.keys(stats?.errorCategories || {}).length > 0 ? (
+            <div className="flex-1 space-y-3 overflow-auto">
+              {(() => {
+                const entries = Object.entries(stats.errorCategories as Record<string, number>).sort(([,a],[,b]) => b - a).slice(0, 5);
+                const maxVal = entries[0]?.[1] || 1;
+                return entries.map(([cat, count]) => (
+                  <div key={cat} className="space-y-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="capitalize">{cat}</span>
+                      <span className="text-slate-400">{count}x</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-pink-400 to-rose-500 rounded-full transition-all" style={{ width: `${(count / maxVal) * 100}%` }} />
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
-            <p className="font-semibold">Brak błędów — super!</p>
-          </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
+              <Check className="h-10 w-10 opacity-15" />
+              <p className="font-semibold">Brak błędów — świetnie!</p>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="glass rounded-[2.5rem] p-10 h-80 flex flex-col">
-          <div className="flex items-center gap-3 mb-8">
+        {/* Language breakdown */}
+        <div className="glass rounded-[2.5rem] p-8 min-h-[16rem] flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
             <div className="p-3 rounded-2xl bg-yellow-50 dark:bg-yellow-900/20">
-              <Star className="h-6 w-6 text-yellow-500" />
+              <Star className="h-5 w-5 text-yellow-500" />
             </div>
-            <h3 className="font-extrabold text-xl tracking-tight">Języki, których się uczysz</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">Języki, których się uczysz</h3>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-4">
-            <Globe className="h-12 w-12 opacity-10 mb-2" />
-            <p className="font-semibold">Wybierz język i zacznij pisać!</p>
-          </div>
+          {Object.keys(stats?.languages || {}).length > 0 ? (
+            <div className="flex-1 flex flex-wrap gap-3 content-start">
+              {Object.entries(stats.languages as Record<string, number>)
+                .sort(([,a],[,b]) => b - a)
+                .map(([code, count]) => {
+                  const l = PRACTICE_LANGS.find(x => x.code === code);
+                  return (
+                    <div key={code} className="flex items-center gap-2.5 px-4 py-2.5 glass rounded-2xl border border-white/20 dark:border-white/5">
+                      <span className="text-2xl">{l?.flag}</span>
+                      <div>
+                        <p className="font-bold text-sm">{l?.name || code}</p>
+                        <p className="text-[11px] text-slate-400">{count} {count === 1 ? 'ćwiczenie' : 'ćwiczeń'}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
+              <Globe className="h-10 w-10 opacity-10" />
+              <p className="font-semibold">Wybierz język i zacznij ćwiczyć!</p>
+            </div>
+          )}
         </div>
-        <div className="glass rounded-[2.5rem] p-10 h-80 flex flex-col">
-          <div className="flex items-center gap-3 mb-8">
+
+        {/* Recent practices */}
+        <div className="glass rounded-[2.5rem] p-8 min-h-[16rem] flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
             <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20">
-              <Zap className="h-6 w-6 text-blue-500" />
+              <Zap className="h-5 w-5 text-blue-500" />
             </div>
-            <h3 className="font-extrabold text-xl tracking-tight">Ostatnie próby</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">Ostatnie próby</h3>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-4">
-            <Flame className="h-12 w-12 opacity-10 mb-2" />
-            <p className="font-semibold">Brak historii</p>
-          </div>
+          {Array.isArray(stats?.recentPractices) && stats.recentPractices.length > 0 ? (
+            <div className="flex-1 space-y-2.5">
+              {stats.recentPractices.map((p: any, i: number) => {
+                const l = PRACTICE_LANGS.find(x => x.code === p.lang);
+                const scoreColor = p.score >= 80 ? 'text-emerald-500' : p.score >= 60 ? 'text-yellow-500' : 'text-red-500';
+                return (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50/50 dark:bg-slate-800/40">
+                    <span className="text-xl shrink-0">{l?.flag}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{l?.name || p.lang}</p>
+                      <p className="text-[11px] text-slate-400">{new Date(p.date).toLocaleDateString('pl-PL')} · {p.mistakeCount} {p.mistakeCount === 1 ? 'błąd' : 'błędów'}</p>
+                    </div>
+                    <span className={`text-xl font-black shrink-0 ${scoreColor}`}>{p.score}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
+              <Flame className="h-10 w-10 opacity-10" />
+              <p className="font-semibold">Brak historii — zacznij teraz!</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
