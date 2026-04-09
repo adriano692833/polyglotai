@@ -307,12 +307,28 @@ async function startServer() {
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
       if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
 
-      // Return cached segments
+      // Normalise whatever Supadata returns into a stable {text, start, dur} shape.
+      // Supadata uses `offset` (seconds float) and `duration`, not `start`/`dur`.
+      const normalise = (raw: any[]) =>
+        raw.map((seg: any) => ({
+          text: String(seg.text || ""),
+          start: Number(seg.start ?? seg.offset ?? 0),
+          dur:   Number(seg.dur   ?? seg.duration ?? 0),
+        }));
+
+      // Return cached segments – but re-normalise in case they were stored with old field names
       if (source.segments) {
-        return res.json({ segments: source.segments });
+        const cached = Array.isArray(source.segments) ? source.segments : [];
+        // If first segment already has NaN start (old cached bad data), force re-fetch
+        const first = cached[0] as any;
+        if (cached.length > 0 && isFinite(Number(first?.start ?? first?.offset))) {
+          return res.json({ segments: normalise(cached) });
+        }
+        // Bad cache – fall through to re-fetch
+        console.log(`[SEGMENTS] stale cache for id=${id}, re-fetching`);
       }
 
-      // Fetch timed segments from Supadata (text=false returns [{text,start,dur}] array)
+      // Fetch timed segments from Supadata (text=false returns array of caption objects)
       const apiKey = process.env.SUPADATA_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "Brak klucza SUPADATA_API_KEY" });
 
@@ -326,14 +342,16 @@ async function startServer() {
       const data = await resp.json() as any;
       if (!resp.ok) return res.status(500).json({ error: data?.message || "Błąd Supadata API" });
 
-      const segments = Array.isArray(data.content) ? data.content : [];
-      if (segments.length === 0) {
+      const raw = Array.isArray(data.content) ? data.content : [];
+      if (raw.length === 0) {
         return res.status(404).json({ error: "Brak segmentów czasowych dla tego filmiku (brak napisów)" });
       }
 
-      // Cache in DB
+      const segments = normalise(raw);
+
+      // Cache normalised segments in DB
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
-      console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length}`);
+      console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length} sample=${JSON.stringify(segments[0])}`);
       res.json({ segments });
     } catch (error: any) {
       console.error("[SEGMENTS] error:", error?.message || error);

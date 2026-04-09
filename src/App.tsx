@@ -2490,7 +2490,10 @@ function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKi
   const segRefs = useRef<(HTMLDivElement | null)[]>([]);
   const prevSegIdxRef = useRef(-1);
 
-  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const fmtTime = (s: number) => {
+    const t = isFinite(s) ? s : 0;
+    return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  };
 
   const speakWord = (text: string) => {
     if (!window.speechSynthesis) return;
@@ -2597,7 +2600,14 @@ function VideoPlayer({ user, isKidMode, onSourceChange }: { user: AuthUser; isKi
     fetch(`/api/transcripts/${selectedTranscript.id}/segments`)
       .then(r => r.json())
       .then(d => {
-        if (Array.isArray(d.segments)) setSegments(d.segments);
+        if (Array.isArray(d.segments)) {
+          // Normalise field names — Supadata may use offset/duration instead of start/dur
+          setSegments(d.segments.map((seg: any) => ({
+            text:  String(seg.text || ''),
+            start: Number(seg.start ?? seg.offset ?? 0),
+            dur:   Number(seg.dur   ?? seg.duration ?? 0),
+          })));
+        }
         else setSegsError(d.error || 'Brak segmentów dla tego filmiku');
       })
       .catch(() => setSegsError('Błąd pobierania segmentów'))
