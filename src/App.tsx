@@ -3071,6 +3071,17 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
               {wordAnalysis.length === 0 && (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
               )}
+              {wordAnalysis.length > 0 && (
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setWordAnalysis([]);
+                    fetch(`/api/transcripts/${selectedTranscript!.id}/vocabulary?refresh=1`).catch(() => {});
+                  }}
+                  className="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
+                  title="Wygeneruj ponownie"
+                >↺ odśwież</button>
+              )}
               <span className="text-slate-400 text-sm">{showVocab ? '▲' : '▼'}</span>
             </div>
           </button>
@@ -3081,7 +3092,9 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
               <div className="flex gap-2 flex-wrap">
                 {(['all','noun','verb','adj','adv'] as const).map(tab => {
                   const labels = { all: 'Wszystkie', noun: 'Rzeczowniki', verb: 'Czasowniki', adj: 'Przymiotniki', adv: 'Przysłówki' };
-                  const counts = { all: wordAnalysis.length, noun: wordAnalysis.filter(w=>w.pos==='noun').length, verb: wordAnalysis.filter(w=>w.pos==='verb').length, adj: wordAnalysis.filter(w=>w.pos==='adj').length, adv: wordAnalysis.filter(w=>w.pos==='adv').length };
+                  // normalise pos defensively for counts
+                  const normP = (p: string) => { const s = (p||'').toLowerCase(); return s.includes('verb')?'verb':s.includes('adj')?'adj':s.includes('adv')?'adv':'noun'; };
+                  const counts = { all: wordAnalysis.length, noun: wordAnalysis.filter(w=>normP(w.pos)==='noun').length, verb: wordAnalysis.filter(w=>normP(w.pos)==='verb').length, adj: wordAnalysis.filter(w=>normP(w.pos)==='adj').length, adv: wordAnalysis.filter(w=>normP(w.pos)==='adv').length };
                   if (tab !== 'all' && counts[tab] === 0) return null;
                   return (
                     <button
@@ -3098,11 +3111,15 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
               {/* Word grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-1">
                 {wordAnalysis
-                  .filter(w => vocabTab === 'all' || w.pos === vocabTab)
+                  .filter(w => {
+                    const normP = (p: string) => { const s = (p||'').toLowerCase(); return s.includes('verb')?'verb':s.includes('adj')?'adj':s.includes('adv')?'adv':'noun'; };
+                    return vocabTab === 'all' || normP(w.pos) === vocabTab;
+                  })
                   .sort((a, b) => b.freq - a.freq)
                   .map((entry, i) => {
-                    const posColor = { noun: 'text-sky-400', verb: 'text-emerald-400', adj: 'text-amber-400', adv: 'text-violet-400' }[entry.pos] || 'text-slate-400';
-                    const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[entry.pos] || entry.pos;
+                    const normPos = (() => { const s = (entry.pos||'').toLowerCase(); return s.includes('verb')?'verb':s.includes('adj')?'adj':s.includes('adv')?'adv':'noun'; })();
+                    const posColor = { noun: 'text-sky-400', verb: 'text-emerald-400', adj: 'text-amber-400', adv: 'text-violet-400' }[normPos] || 'text-slate-400';
+                    const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[normPos];
                     return (
                       <div
                         key={i}
@@ -3166,8 +3183,9 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
               {(() => {
                 const entry = wordAnalysis.find(w => w.word.toLowerCase() === popup.word.toLowerCase());
                 if (!entry) return null;
-                const posColor = { noun: 'text-sky-400 bg-sky-400/10', verb: 'text-emerald-400 bg-emerald-400/10', adj: 'text-amber-400 bg-amber-400/10', adv: 'text-violet-400 bg-violet-400/10' }[entry.pos] || '';
-                const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[entry.pos] || entry.pos;
+                const np2 = (() => { const s = (entry.pos||'').toLowerCase(); return s.includes('verb')?'verb':s.includes('adj')?'adj':s.includes('adv')?'adv':'noun'; })();
+                const posColor = { noun: 'text-sky-400 bg-sky-400/10', verb: 'text-emerald-400 bg-emerald-400/10', adj: 'text-amber-400 bg-amber-400/10', adv: 'text-violet-400 bg-violet-400/10' }[np2] || '';
+                const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[np2];
                 return <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${posColor}`}>{posLabel}</span>;
               })()}
             </div>

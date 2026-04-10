@@ -326,30 +326,46 @@ async function generateAndCachePLTranslations(id: string, segments: Array<{text:
 // Background: analyse vocabulary (frequency, POS, translation, example sentence) and cache in DB.
 async function generateWordAnalysis(id: string, transcript: string, lang: string) {
   try {
-    // Count word frequencies
     const stopwords = new Set([
+      // English
       'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did',
       'will','would','could','should','may','might','shall','can','to','of','in','on','at','by','for',
       'with','about','from','into','through','during','before','after','above','below','up','down',
       'and','but','or','nor','so','yet','both','either','neither','not','no','if','then','than','that',
       'this','these','those','it','its','i','you','he','she','we','they','me','him','her','us','them',
       'my','your','his','our','their','what','which','who','whom','whose','when','where','why','how',
-      'der','die','das','den','dem','des','ein','eine','einen','einem','einer','eines','und','oder',
-      'aber','auch','mit','für','von','aus','an','in','auf','bei','nach','über','unter','vor','hinter',
-      'ist','sind','war','waren','hat','haben','wird','werden','kann','können','muss','müssen','soll',
+      'as','just','been','also','more','very','too','here','there','now','only','even','still','back',
+      // German
+      'der','die','das','des','dem','den','ein','eine','einen','einem','einer','eines',
+      'und','oder','aber','auch','mit','für','von','aus','an','auf','bei','nach','seit',
+      'über','unter','vor','hinter','neben','zwischen','durch','gegen','ohne','um',
+      'ist','sind','war','waren','hat','haben','hatte','hatten','wird','werden','wurde','wurden',
+      'kann','können','muss','müssen','soll','sollen','darf','dürfen','mag','mögen',
+      'ich','du','er','sie','es','wir','ihr','sie','mich','dich','sich','uns','euch',
+      'mein','dein','sein','ihr','unser','euer','dieser','diese','dieses','jeder','jede',
+      'nicht','kein','keine','noch','schon','dann','wenn','weil','dass','damit','ob',
+      'so','wie','als','nach','zu','ins','zum','zur','im','am','ans','vom','beim',
+      // French
       'le','la','les','un','une','des','du','de','et','ou','mais','donc','car','que','qui','quoi',
-      'el','la','los','las','un','una','de','del','en','y','o','pero','también','que','con',
-      'il','lo','la','i','gli','le','un','una','di','da','in','e','o','ma','che','con',
+      'je','tu','il','nous','vous','ils','me','te','se','lui','leur','mon','ton','son',
+      // Spanish
+      'el','los','las','del','al','en','con','por','para','sobre','entre','ante',
+      'yo','tú','él','ella','nosotros','ellos','me','te','lo','le','nos','les',
+      // Italian
+      'il','lo','gli','una','degli','nei','sui','agli','dall','dell','nell',
+      // Polish
       'się','jest','są','być','nie','to','że','na','w','z','do','i','a','ale','jak','po',
+      'co','tak','już','czy','się','go','jej','jego','ich','nam','pan','pani',
     ]);
 
     const freqMap: Record<string, number> = {};
-    transcript.toLowerCase().replace(/[^a-záéíóúüäöñàèìòùâêîôûçşğışçöü\w\s'-]/gi, ' ')
-      .split(/\s+/)
-      .forEach(w => {
-        const clean = w.replace(/^['-]+|['-]+$/g, '').trim();
-        if (clean.length < 3 || stopwords.has(clean) || /^\d+$/.test(clean)) return;
-        freqMap[clean] = (freqMap[clean] || 0) + 1;
+    // Normalise to lowercase, strip punctuation, split
+    transcript.replace(/["""„«»]/g, ' ')
+      .split(/[\s\n\r]+/)
+      .forEach(raw => {
+        const w = raw.replace(/^[^a-záéíóúüäöñàèìòùâêîôûçşğışçöü\w]+|[^a-záéíóúüäöñàèìòùâêîôûçşğışçöü\w]+$/gi, '').toLowerCase();
+        if (w.length < 3 || stopwords.has(w) || /^\d+$/.test(w)) return;
+        freqMap[w] = (freqMap[w] || 0) + 1;
       });
 
     const top60 = Object.entries(freqMap)
@@ -359,33 +375,37 @@ async function generateWordAnalysis(id: string, transcript: string, lang: string
 
     if (top60.length < 3) return;
 
-    const wordList = top60.map(({ word, freq }) => `${word} (${freq}x)`).join(', ');
+    const wordList = top60.map(({ word, freq }) => `"${word}" (${freq}x)`).join(', ');
     const textSample = transcript.slice(0, 4000);
 
-    const prompt = `Masz listę ${top60.length} najczęstszych słów z tekstu w języku "${lang}" oraz fragment tego tekstu.
-Dla każdego słowa z listy zwróć JSON:
-[{"word":"<słowo>","translation":"<tłumaczenie po polsku>","pos":"noun|verb|adj|adv","example":"<krótkie zdanie z tekstu zawierające to słowo>","freq":<liczba_wystąpień>}]
+    const prompt = `Jesteś ekspertem języka "${lang}". Masz listę słów z tekstu i fragment tego tekstu.
 
-Zasady:
-- "pos": noun=rzeczownik, verb=czasownik, adj=przymiotnik, adv=przysłówek
-- "example": TYLKO zdanie które faktycznie zawiera to słowo (dosłownie skopiowane z tekstu, max 120 znaków)
-- "translation": tłumaczenie które pasuje do kontekstu tekstu, nie generyczne
-- Odpowiedz TYLKO JSON array, bez żadnego dodatkowego tekstu
+ZADANIE: Dla każdego słowa z listy utwórz obiekt JSON z polami:
+- "word": słowo dokładnie tak jak w liście (małe litery)
+- "translation": POLSKIE tłumaczenie (PO POLSKU! np. "dom", "biegać", "piękny")
+- "pos": DOKŁADNIE jedna z czterech wartości: "noun" (rzeczownik), "verb" (czasownik), "adj" (przymiotnik), "adv" (przysłówek)
+- "example": krótkie zdanie (max 100 znaków) DOSŁOWNIE skopiowane z poniższego tekstu, które zawiera to słowo; jeśli nie ma — zostaw pusty string ""
+- "freq": liczba wystąpień (podana w nawiasie)
 
-Słowa: ${wordList}
+WAŻNE:
+- "translation" MUSI być po POLSKU — nie po angielsku, nie po niemiecku, nie po włosku!
+- "pos" MUSI być dokładnie jedną z: noun / verb / adj / adv
+- Odpowiedz TYLKO JSON array [], bez żadnego tekstu przed ani po
 
-Fragment tekstu:
+Lista słów: ${wordList}
+
+Fragment tekstu (źródło przykładów):
 ${textSample}`;
 
-    console.log(`[VOCAB] start bg analysis id=${id} words=${top60.length}`);
+    console.log(`[VOCAB] start bg analysis id=${id} words=${top60.length} lang=${lang}`);
     const result = await callAI(prompt);
 
     let words: any[] = [];
     try {
-      const parsed = JSON.parse(stripMarkdownJson(result));
+      const cleaned = stripMarkdownJson(result);
+      const parsed = JSON.parse(cleaned);
       if (Array.isArray(parsed)) words = parsed;
     } catch {
-      // Try to extract partial JSON
       const match = result.match(/\[[\s\S]+\]/);
       if (match) {
         try { words = JSON.parse(match[0]); } catch { return; }
@@ -393,11 +413,23 @@ ${textSample}`;
     }
 
     if (words.length > 3) {
-      // Merge client-side freq data (in case AI missed some)
-      words = words.map(w => ({
-        ...w,
-        freq: w.freq ?? freqMap[w.word?.toLowerCase()] ?? 1,
-      }));
+      // Normalise POS to exactly one of the four allowed values
+      const normalisePos = (pos: string): 'noun'|'verb'|'adj'|'adv' => {
+        const p = String(pos || '').toLowerCase();
+        if (p.includes('verb')) return 'verb';
+        if (p.includes('adj')) return 'adj';
+        if (p.includes('adv')) return 'adv';
+        return 'noun';
+      };
+      words = words
+        .filter(w => w.word && w.translation && w.translation.length > 0)
+        .map(w => ({
+          word:        String(w.word).toLowerCase().trim(),
+          translation: String(w.translation).trim(),
+          pos:         normalisePos(w.pos),
+          example:     String(w.example || '').trim().slice(0, 120),
+          freq:        Number(w.freq) || freqMap[String(w.word).toLowerCase()] || 1,
+        }));
       await prisma.transcriptSource.update({ where: { id }, data: { wordAnalysis: words } });
       console.log(`[VOCAB] cached id=${id} count=${words.length}`);
     }
@@ -492,17 +524,35 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
   app.get("/api/transcripts/:id/vocabulary", async (req, res) => {
     try {
       const { id } = req.params;
+      const refresh = req.query.refresh === '1';
       const source = await prisma.transcriptSource.findUnique({
         where: { id },
         select: { wordAnalysis: true, transcript: true, lang: true },
       });
       if (!source) return res.status(404).json({ error: "Not found" });
-      const ready = Array.isArray(source.wordAnalysis) && (source.wordAnalysis as any[]).length > 3;
-      if (!ready && source.transcript) {
-        // Kick off background generation if not yet done
-        generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+
+      // Validate cached data — invalidate if POS tags are compound or not in allowed set
+      const allowedPos = new Set(['noun','verb','adj','adv']);
+      const cached = Array.isArray(source.wordAnalysis) ? source.wordAnalysis as any[] : [];
+      const isValid = cached.length > 3 && cached.every(w => allowedPos.has(w.pos));
+
+      if (refresh || !isValid) {
+        if (isValid && !refresh) {
+          // Data looks valid, don't regenerate
+        } else {
+          // Stale/bad data — clear and regenerate
+          if (!isValid && cached.length > 0) {
+            console.log(`[VOCAB] invalidating stale data id=${id}`);
+            await prisma.transcriptSource.update({ where: { id }, data: { wordAnalysis: null } });
+          }
+          if (source.transcript) {
+            generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+          }
+          return res.json({ words: null, ready: false });
+        }
       }
-      res.json({ words: ready ? source.wordAnalysis : null, ready: !!ready });
+
+      res.json({ words: isValid ? source.wordAnalysis : null, ready: isValid });
     } catch (error: any) {
       res.status(500).json({ error: error?.message });
     }
