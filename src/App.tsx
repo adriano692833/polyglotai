@@ -2913,14 +2913,22 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
 
     setTranslatingDual(true);
     const batch = segments.slice(0, 80);
-    const prompt = `Translate each line to ${nativeLangLabel}. Keep numbering. Format: "N. translation"\n\n${batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 5000)}`;
+    // Cut at line boundary, 1-based numbering (AI models naturally count from 1)
+    const rawLines = batch.map((s, i) => `${i + 1}. ${s.text}`);
+    let joined = rawLines.join('\n');
+    if (joined.length > 4800) { const cut = joined.lastIndexOf('\n', 4800); joined = cut > 0 ? joined.slice(0, cut) : joined.slice(0, 4800); }
+    const prompt = `Translate each numbered line to ${nativeLangLabel}. Output ONLY the numbered translations in the same "N. translation" format, one per line.\n\n${joined}`;
     requestAiText(prompt, false)
       .then(result => {
-        const trans: Record<number, string> = {};
+        // Collect pairs and auto-detect offset (0-based vs 1-based AI output)
+        const pairs: Array<{key: number; text: string}> = [];
         result.split('\n').forEach(line => {
           const m = line.match(/^(\d+)\.\s*(.+)/);
-          if (m) trans[parseInt(m[1])] = m[2].trim();
+          if (m) pairs.push({ key: parseInt(m[1]), text: m[2].trim() });
         });
+        const minKey = pairs.length > 0 ? Math.min(...pairs.map(p => p.key)) : 0;
+        const trans: Record<number, string> = {};
+        pairs.forEach(p => { trans[p.key - minKey] = p.text; });
         setSegTranslations(trans);
       })
       .catch(() => {})

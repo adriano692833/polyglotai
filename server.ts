@@ -376,18 +376,29 @@ async function startServer() {
 async function generateAndCachePLTranslations(id: string, segments: Array<{text: string; start: number; dur: number}>, targetLang = 'Polish') {
   try {
     const batch = segments.slice(0, 150);
-    const lines = batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 9000);
-    const prompt = `Translate each line to ${targetLang}. Keep numbering. Format: "N. translation"\n\n${lines}`;
+    // Build numbered lines (1-based — AI models naturally count from 1) and cut at line boundary
+    const rawLines = batch.map((s, i) => `${i + 1}. ${s.text}`);
+    let joined = rawLines.join('\n');
+    if (joined.length > 8500) {
+      const cut = joined.lastIndexOf('\n', 8500);
+      joined = cut > 0 ? joined.slice(0, cut) : joined.slice(0, 8500);
+    }
+    const prompt = `Translate each numbered line to ${targetLang}. Output ONLY the numbered translations in the same "N. translation" format, one per line.\n\n${joined}`;
     console.log(`[TRANS] start bg translation id=${id} segs=${batch.length}`);
     const result = await callAI(prompt);
-    const trans: Record<number, string> = {};
+    // Collect parsed (rawKey, text) pairs first
+    const pairs: Array<{key: number; text: string}> = [];
     result.split('\n').forEach(line => {
       const m = line.match(/^(\d+)\.\s*(.+)/);
-      if (m) trans[parseInt(m[1])] = m[2].trim();
+      if (m) pairs.push({ key: parseInt(m[1]), text: m[2].trim() });
     });
+    // Auto-detect offset (AI may use 0-based or 1-based) and normalise to 0-based
+    const minKey = pairs.length > 0 ? Math.min(...pairs.map(p => p.key)) : 0;
+    const trans: Record<number, string> = {};
+    pairs.forEach(p => { trans[p.key - minKey] = p.text; });
     if (Object.keys(trans).length > 5) {
       await prisma.transcriptSource.update({ where: { id }, data: { segTranslations: trans } });
-      console.log(`[TRANS] cached id=${id} count=${Object.keys(trans).length}`);
+      console.log(`[TRANS] cached id=${id} count=${Object.keys(trans).length} offset=${minKey}`);
     }
   } catch (e: any) {
     console.error(`[TRANS] bg failed id=${id}:`, e?.message || e);
