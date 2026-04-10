@@ -2949,25 +2949,39 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
     if (cached?.translation) return; // instant — no AI call needed
 
     try {
-      const start = Math.max(0, currentSegIdx - 1);
-      const end = Math.min(segments.length - 1, currentSegIdx + 1);
-      const ctxText = segments.slice(start, end + 1).map(s => s.text).join(' ');
-      const ctx = ctxText ? `Sentence context: "${ctxText}"\n` : '';
-      // Fire AI immediately — runs in parallel with MyMemory
-      const aiPromise = requestAiText(
-        `${ctx}Translate the ${lang} word/phrase "${clean}" to ${nativeLangLabel}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`,
-        false
-      );
-      // Show quick DeepL result at ~200ms while AI is still working
-      const quick = await translateWordQuick(clean, lang, nativeLang, ctxText);
-      if (quick) setPopup(p => p?.word === clean ? { ...p, translation: quick } : p);
-      // Replace with accurate AI result (has full context)
-      const accurate = (await aiPromise).trim();
-      if (accurate) setPopup(p => p?.word === clean ? { ...p, translation: accurate } : p);
+      const segText = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
+      const segTrans = segTranslations[currentSegIdx] || '';
+
+      if (segTrans) {
+        // Best path: extract word from the already-translated sentence pair — perfect context, fast
+        const aiPromise = requestAiText(
+          `Original sentence: "${segText}"\nTranslation: "${segTrans}"\nWhat is the ${nativeLangLabel} translation of "${clean}" in this sentence? Reply ONLY with the translated word.`,
+          false
+        );
+        // DeepL in parallel as instant preview
+        const quick = await translateWordQuick(clean, lang, nativeLang, segText);
+        if (quick) setPopup(p => p?.word === clean ? { ...p, translation: quick } : p);
+        const accurate = (await aiPromise).trim();
+        if (accurate) setPopup(p => p?.word === clean ? { ...p, translation: accurate } : p);
+      } else {
+        // Fallback: no subtitle translation yet — use ±1 segment context + DeepL parallel
+        const start = Math.max(0, currentSegIdx - 1);
+        const end = Math.min(segments.length - 1, currentSegIdx + 1);
+        const ctxText = segments.slice(start, end + 1).map(s => s.text).join(' ');
+        const ctx = ctxText ? `Sentence context: "${ctxText}"\n` : '';
+        const aiPromise = requestAiText(
+          `${ctx}Translate the ${lang} word/phrase "${clean}" to ${nativeLangLabel}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`,
+          false
+        );
+        const quick = await translateWordQuick(clean, lang, nativeLang, ctxText);
+        if (quick) setPopup(p => p?.word === clean ? { ...p, translation: quick } : p);
+        const accurate = (await aiPromise).trim();
+        if (accurate) setPopup(p => p?.word === clean ? { ...p, translation: accurate } : p);
+      }
     } catch {
       setPopup(p => p?.word === clean ? { ...p, translation: p?.translation || '—' } : p);
     }
-  }, [lang, nativeLang, currentSegIdx, segments, wordAnalysis]);
+  }, [lang, nativeLang, currentSegIdx, segments, segTranslations, wordAnalysis]);
 
   const saveToVocab = async () => {
     if (!popup?.translation || popup.saving) return;
