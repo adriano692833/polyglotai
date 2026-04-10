@@ -44,6 +44,32 @@ const S = {
   refresh:       { pl:'↺ odśwież',    en:'↺ refresh',     de:'↺ aktualisieren',es:'↺ actualizar',  fr:'↺ actualiser',  it:'↺ aggiorna'     },
   dualSubs:      { pl:'Tłumaczenia',  en:'Translations',  de:'Übersetzungen', es:'Traducciones',   fr:'Traductions',   it:'Traduzioni'     },
   noSegments:    { pl:'używam trybu tekstowego', en:'using text mode', de:'Textmodus', es:'modo texto', fr:'mode texte', it:'modalità testo' },
+  // Dashboard — stat cards
+  streakLabel:   { pl:'Seria dni',        en:'Streak',          de:'Tagesstreak',     es:'Racha',          fr:'Série',           it:'Serie'           },
+  streakSub:     { pl:'dni z rzędu',      en:'days in a row',   de:'Tage am Stück',   es:'días seguidos',  fr:'jours consécutifs',it:'giorni di fila'  },
+  textsLabel:    { pl:'Teksty',           en:'Texts',           de:'Texte',           es:'Textos',         fr:'Textes',          it:'Testi'           },
+  textsSub:      { pl:'napisane i sprawdzone',en:'written & checked',de:'geschrieben & geprüft',es:'escritos y revisados',fr:'écrits et vérifiés',it:'scritti e verificati'},
+  avgScoreLabel: { pl:'Średni wynik',     en:'Avg. score',      de:'Ø Ergebnis',      es:'Puntuación media',fr:'Score moyen',    it:'Punteggio medio' },
+  vocabWords:    { pl:'słówek',           en:'vocab',           de:'Wörter',          es:'palabras',       fr:'mots',            it:'parole'          },
+  // Dashboard — section titles
+  recentScores:  { pl:'Ostatnie wyniki',  en:'Recent scores',   de:'Letzte Ergebnisse',es:'Últimas puntuaciones',fr:'Scores récents',it:'Punteggi recenti'},
+  errorCats:     { pl:'Kategorie błędów', en:'Error categories',de:'Fehlerkategorien',es:'Categorías de errores',fr:'Catégories d\'erreurs',it:'Categorie di errori'},
+  langLearning:  { pl:'Języki nauki',     en:'Languages',       de:'Lernsprachen',    es:'Idiomas',        fr:'Langues',         it:'Lingue'          },
+  recentPractice:{ pl:'Ostatnie próby',   en:'Recent sessions', de:'Letzte Versuche', es:'Últimas sesiones',fr:'Dernières séances',it:'Sessioni recenti'},
+  // Dashboard — empty states
+  noDataYet:     { pl:'Brak danych — zacznij ćwiczyć!',en:'No data yet — start practising!',de:'Noch keine Daten — leg los!',es:'Sin datos — ¡empieza!',fr:'Aucune donnée — commence !',it:'Nessun dato — inizia!'},
+  noErrorsYet:   { pl:'Brak błędów — świetnie!',en:'No errors — great job!',de:'Keine Fehler — super!',es:'Sin errores — ¡genial!',fr:'Pas d\'erreurs — bravo !',it:'Nessun errore — ottimo!'},
+  noHistoryYet:  { pl:'Brak historii — zacznij teraz!',en:'No history — start now!',de:'Keine Einträge — los!',es:'Sin historial — ¡ahora!',fr:'Aucun historique — commence !',it:'Nessuna cronologia — inizia!'},
+  chooseToStart: { pl:'Wybierz język i zacznij!',en:'Choose a language and start!',de:'Wähle eine Sprache!',es:'¡Elige un idioma!',fr:'Choisis une langue !',it:'Scegli una lingua!'},
+  // Singular / plural counts
+  exercise1:     { pl:'ćwiczenie',        en:'exercise',        de:'Übung',           es:'ejercicio',      fr:'exercice',        it:'esercizio'       },
+  exerciseN:     { pl:'ćwiczeń',          en:'exercises',       de:'Übungen',         es:'ejercicios',     fr:'exercices',       it:'esercizi'        },
+  error1:        { pl:'błąd',             en:'error',           de:'Fehler',          es:'error',          fr:'erreur',          it:'errore'          },
+  errorN:        { pl:'błędów',           en:'errors',          de:'Fehler',          es:'errores',        fr:'erreurs',         it:'errori'          },
+  // Header
+  kidModeBtn:    { pl:'🧒 Dziecko',       en:'🧒 Kid',          de:'🧒 Kind',         es:'🧒 Niño',        fr:'🧒 Enfant',       it:'🧒 Bambino'      },
+  adultModeBtn:  { pl:'🎓 Dorosły',       en:'🎓 Adult',        de:'🎓 Erwachsener',  es:'🎓 Adulto',      fr:'🎓 Adulte',       it:'🎓 Adulto'       },
+  activeSource:  { pl:'Aktywne źródło:',  en:'Active source:',  de:'Aktive Quelle:',  es:'Fuente activa:', fr:'Source active :', it:'Fonte attiva:'   },
 };
 
 export type TKey = keyof typeof S;
@@ -82,4 +108,9 @@ export const NATIVE_LANG_DISPLAY: Record<string, string> = {
 export const UI_LANG_DISPLAY: Record<UiLang, string> = {
   pl: 'Polski 🇵🇱', en: 'English 🇬🇧', de: 'Deutsch 🇩🇪',
   es: 'Español 🇪🇸', fr: 'Français 🇫🇷', it: 'Italiano 🇮🇹',
+};
+
+// Browser locale code per UI language (for date formatting)
+export const UI_LANG_LOCALE: Record<UiLang, string> = {
+  pl: 'pl-PL', en: 'en-GB', de: 'de-DE', es: 'es-ES', fr: 'fr-FR', it: 'it-IT',
 };

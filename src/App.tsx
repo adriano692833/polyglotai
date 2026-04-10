@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X, Play, Settings } from 'lucide-react';
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
-import { t, UiLang, NATIVE_LANG_NAME, NATIVE_LANG_DISPLAY, UI_LANG_DISPLAY } from './i18n';
+import { t, UiLang, NATIVE_LANG_NAME, NATIVE_LANG_DISPLAY, UI_LANG_DISPLAY, UI_LANG_LOCALE } from './i18n';
 
 // --- COMPONENTS ---
 async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
@@ -452,7 +452,7 @@ export default function App() {
                     : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-white/[0.06]'
                 }`}
               >
-                {isKidMode ? '🧒 Dziecko' : '🎓 Dorosły'}
+                {t(isKidMode ? 'kidModeBtn' : 'adultModeBtn', uiLang)}
               </button>
 
               {/* User badge — hidden on mobile */}
@@ -617,7 +617,7 @@ export default function App() {
               : 'bg-brand-500/8 border-brand-500/20 text-brand-600 dark:text-brand-400'
           }`}>
             <span className="text-sm">📹</span>
-            <span className="truncate flex-1">Aktywne źródło: <span className="font-black">{globalSource.title}</span></span>
+            <span className="truncate flex-1">{t('activeSource', uiLang)} <span className="font-black">{globalSource.title}</span></span>
             <button
               onClick={() => setGlobalSourceAndPersist(null)}
               className="shrink-0 p-1 hover:bg-white/20 rounded-lg transition-colors opacity-60 hover:opacity-100"
@@ -639,7 +639,7 @@ export default function App() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === 'dashboard' && <Dashboard user={user} isKidMode={isKidMode} />}
+            {activeTab === 'dashboard' && <Dashboard user={user} isKidMode={isKidMode} uiLang={uiLang} />}
             {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
             {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
             {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
@@ -655,7 +655,7 @@ export default function App() {
       {/* Build version footer */}
       <footer className="relative z-10 py-4 text-center">
         <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-          build {new Date((globalThis as any).__BUILD_TIME__ ?? Date.now()).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })}
+          build {new Date((globalThis as any).__BUILD_TIME__ ?? Date.now()).toLocaleString(UI_LANG_LOCALE[uiLang], { dateStyle: 'short', timeStyle: 'short' })}
         </span>
       </footer>
     </div>
@@ -799,7 +799,8 @@ function AuthScreen({ onLogin }: { onLogin: (user: AuthUser) => void }) {
   );
 }
 
-function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) {
+function Dashboard({ user, isKidMode, uiLang }: { user: AuthUser; isKidMode: boolean; uiLang: UiLang }) {
+  const locale = UI_LANG_LOCALE[uiLang];
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -823,25 +824,25 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          icon={<Flame className="h-5 w-5 text-brand-500" />} 
-          label="Seria dni" 
-          value={`${stats?.streak || 0}`} 
-          subValue="dni z rzędu"
+        <StatCard
+          icon={<Flame className="h-5 w-5 text-brand-500" />}
+          label={t('streakLabel', uiLang)}
+          value={`${stats?.streak || 0}`}
+          subValue={t('streakSub', uiLang)}
           barColor="bg-gradient-to-t from-brand-600 to-red-500"
           progress={Math.min((stats?.streak || 0) * 10, 100)}
         />
         <StatCard
           icon={<Book className="h-5 w-5 text-purple-500" />}
-          label="Teksty"
+          label={t('textsLabel', uiLang)}
           value={`${stats?.totalPractices || 0}`}
-          subValue="napisane i sprawdzone"
+          subValue={t('textsSub', uiLang)}
           barColor="bg-gradient-to-t from-purple-600 to-indigo-500"
           progress={Math.min((stats?.totalPractices || 0) * 5, 100)}
         />
         <StatCard
           icon={<BarChart3 className="h-5 w-5 text-emerald-500" />}
-          label="Średni wynik"
+          label={t('avgScoreLabel', uiLang)}
           value={`${stats?.averageScore || 0}`}
           subValue={`min ${stats?.minScore || 0} / max ${stats?.maxScore || 0}`}
           barColor="bg-gradient-to-t from-emerald-600 to-teal-500"
@@ -849,9 +850,9 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
         />
         <StatCard
           icon={<Layers className="h-5 w-5 text-blue-500" />}
-          label="Fiszki"
+          label={t('flashcards', uiLang)}
           value={`${stats?.flashcardCount || 0}`}
-          subValue={`+ ${stats?.vocabCount || 0} słówek`}
+          subValue={`+ ${stats?.vocabCount || 0} ${t('vocabWords', uiLang)}`}
           barColor="bg-gradient-to-t from-blue-600 to-cyan-500"
           progress={Math.min((stats?.flashcardCount || 0) * 2, 100)}
         />
@@ -864,7 +865,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
             <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20">
               <BarChart3 className="h-5 w-5 text-emerald-500" />
             </div>
-            <h3 className="font-extrabold text-lg tracking-tight">Ostatnie wyniki</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">{t('recentScores', uiLang)}</h3>
           </div>
           {Array.isArray(stats?.scoreHistory) && stats.scoreHistory.length > 0 ? (
             <div className="flex-1 flex items-end gap-1.5">
@@ -881,7 +882,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
               <Plus className="h-10 w-10 opacity-15" />
-              <p className="font-semibold">Brak danych — zacznij ćwiczyć!</p>
+              <p className="font-semibold">{t('noDataYet', uiLang)}</p>
             </div>
           )}
         </div>
@@ -892,7 +893,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
             <div className="p-3 rounded-2xl bg-pink-50 dark:bg-pink-900/20">
               <Check className="h-5 w-5 text-pink-500" />
             </div>
-            <h3 className="font-extrabold text-lg tracking-tight">Kategorie błędów</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">{t('errorCats', uiLang)}</h3>
           </div>
           {Object.keys(stats?.errorCategories || {}).length > 0 ? (
             <div className="flex-1 space-y-3 overflow-auto">
@@ -915,7 +916,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
               <Check className="h-10 w-10 opacity-15" />
-              <p className="font-semibold">Brak błędów — świetnie!</p>
+              <p className="font-semibold">{t('noErrorsYet', uiLang)}</p>
             </div>
           )}
         </div>
@@ -928,7 +929,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
             <div className="p-3 rounded-2xl bg-yellow-50 dark:bg-yellow-900/20">
               <Star className="h-5 w-5 text-yellow-500" />
             </div>
-            <h3 className="font-extrabold text-lg tracking-tight">Języki, których się uczysz</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">{t('langLearning', uiLang)}</h3>
           </div>
           {Object.keys(stats?.languages || {}).length > 0 ? (
             <div className="flex-1 flex flex-wrap gap-3 content-start">
@@ -941,7 +942,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
                       <span className="text-2xl">{l?.flag}</span>
                       <div>
                         <p className="font-bold text-sm">{l?.name || code}</p>
-                        <p className="text-[11px] text-slate-400">{count} {count === 1 ? 'ćwiczenie' : 'ćwiczeń'}</p>
+                        <p className="text-[11px] text-slate-400">{count} {t(count === 1 ? 'exercise1' : 'exerciseN', uiLang)}</p>
                       </div>
                     </div>
                   );
@@ -950,7 +951,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
               <Globe className="h-10 w-10 opacity-10" />
-              <p className="font-semibold">Wybierz język i zacznij ćwiczyć!</p>
+              <p className="font-semibold">{t('chooseToStart', uiLang)}</p>
             </div>
           )}
         </div>
@@ -961,7 +962,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
             <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20">
               <Zap className="h-5 w-5 text-blue-500" />
             </div>
-            <h3 className="font-extrabold text-lg tracking-tight">Ostatnie próby</h3>
+            <h3 className="font-extrabold text-lg tracking-tight">{t('recentPractice', uiLang)}</h3>
           </div>
           {Array.isArray(stats?.recentPractices) && stats.recentPractices.length > 0 ? (
             <div className="flex-1 space-y-2.5">
@@ -973,7 +974,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
                     <span className="text-xl shrink-0">{l?.flag}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate">{l?.name || p.lang}</p>
-                      <p className="text-[11px] text-slate-400">{new Date(p.date).toLocaleDateString('pl-PL')} · {p.mistakeCount} {p.mistakeCount === 1 ? 'błąd' : 'błędów'}</p>
+                      <p className="text-[11px] text-slate-400">{new Date(p.date).toLocaleDateString(locale)} · {p.mistakeCount} {t(p.mistakeCount === 1 ? 'error1' : 'errorN', uiLang)}</p>
                     </div>
                     <span className={`text-xl font-black shrink-0 ${scoreColor}`}>{p.score}</span>
                   </div>
@@ -983,7 +984,7 @@ function Dashboard({ user, isKidMode }: { user: AuthUser, isKidMode: boolean }) 
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm space-y-3">
               <Flame className="h-10 w-10 opacity-10" />
-              <p className="font-semibold">Brak historii — zacznij teraz!</p>
+              <p className="font-semibold">{t('noHistoryYet', uiLang)}</p>
             </div>
           )}
         </div>
