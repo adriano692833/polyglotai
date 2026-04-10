@@ -591,7 +591,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
   app.post("/api/practice/save", async (req, res) => {
     try {
       const { text, targetLang, level, userId, result } = req.body;
-      
+
       await prisma.writingPractice.create({
         data: {
           targetLang,
@@ -603,6 +603,27 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
           userId: userId || null,
         },
       });
+
+      // Award points + update streak if user is logged in
+      if (userId) {
+        const scoreVal = Math.max(0, Math.min(100, result.score || 0));
+        const earned = 10 + Math.round(scoreVal / 10); // 10–20 points per practice
+        const today = new Date().toISOString().split('T')[0];
+        const existing = await prisma.userPoints.findUnique({ where: { userId } });
+        const lastDate = existing?.lastActiveDate || '';
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const newStreak = lastDate === today
+          ? (existing?.streak ?? 1)
+          : lastDate === yesterday
+            ? (existing?.streak ?? 0) + 1
+            : 1;
+        await prisma.userPoints.upsert({
+          where: { userId },
+          update: { points: { increment: earned }, streak: newStreak, lastActiveDate: today, updatedAt: new Date() },
+          create: { userId, points: earned, streak: newStreak, lastActiveDate: today },
+        });
+        await prisma.pointLog.create({ data: { userId, amount: earned, reason: `writing_practice_score_${scoreVal}` } });
+      }
 
       res.json({ success: true });
     } catch (error) {
@@ -656,18 +677,35 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
     }
   });
 
-  // Flashcards: Update status
+  // Flashcards: Update status (review)
   app.put("/api/flashcards", async (req, res) => {
     try {
-      const { id, status } = req.body;
+      const { id, status, userId } = req.body;
       const card = await prisma.flashcard.update({
         where: { id },
-        data: { 
+        data: {
           status,
           reviews: { increment: 1 },
-          lastReview: new Date()
+          lastReview: new Date(),
         },
       });
+      // Award 5 points per flashcard review
+      if (userId) {
+        const today = new Date().toISOString().split('T')[0];
+        const existing = await prisma.userPoints.findUnique({ where: { userId } });
+        const lastDate = existing?.lastActiveDate || '';
+        const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        const newStreak = lastDate === today
+          ? (existing?.streak ?? 1)
+          : lastDate === yesterday
+            ? (existing?.streak ?? 0) + 1
+            : 1;
+        await prisma.userPoints.upsert({
+          where: { userId },
+          update: { points: { increment: 5 }, streak: newStreak, lastActiveDate: today, updatedAt: new Date() },
+          create: { userId, points: 5, streak: newStreak, lastActiveDate: today },
+        });
+      }
       res.json(card);
     } catch (error) {
       res.status(500).json({ error: "Błąd aktualizacji fiszki" });
@@ -932,22 +970,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
     });
   }
 
-  // Seed challenges
-  const seedChallenges = async () => {
-    const count = await prisma.dailyChallenge.count();
-    if (count === 0) {
-      const today = new Date().toISOString().split('T')[0];
-      await prisma.dailyChallenge.create({
-        data: {
-          date: today,
-          prompt: "Napisz 3 zdania o swoim ulubionym zwierzątku!",
-          lang: "en",
-          level: "a1"
-        }
-      });
-    }
-  };
-  seedChallenges().catch(e => console.error('[SEED]', e?.message || e));
+  // No seed needed — challenges are generated on-demand by AI in the Challenge tab.
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

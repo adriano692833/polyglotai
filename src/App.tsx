@@ -633,7 +633,7 @@ export default function App() {
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-2">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab + (isKidMode ? '-kid' : '')}
+            key={activeTab + globalLang + (isKidMode ? '-kid' : '')}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -1341,14 +1341,14 @@ function Flashcards({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUs
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/flashcards?userId=${user.id}`)
+    fetch(`/api/flashcards?userId=${user.id}&lang=${lang}`)
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) { setAllCards(data); setStudyDeck([...data]); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [user.id]);
+  }, [user.id, lang]);
 
   // Navigation
   const handleNext = useCallback(() => {
@@ -1368,6 +1368,12 @@ function Flashcards({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUs
     const card = studyDeck[currentIndex];
     setIsFlipped(false); setAiResponse(null);
     setKnownIds(prev => [...prev, card.id]);
+    // Persist review to server (fire-and-forget)
+    fetch('/api/flashcards', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: card.id, status: 'known', userId: user.id }),
+    }).catch(() => {});
     setTimeout(() => {
       setStudyDeck(prev => {
         const next = prev.filter(c => c.id !== card.id);
@@ -1375,7 +1381,7 @@ function Flashcards({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUs
         return next;
       });
     }, 150);
-  }, [studyDeck, currentIndex]);
+  }, [studyDeck, currentIndex, user.id]);
 
   const handleShuffle = () => {
     setIsFlipped(false); setAiResponse(null);
@@ -1551,16 +1557,16 @@ function Flashcards({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUs
           <div className={`glass rounded-[2rem] p-6 border shadow-xl space-y-4 ${isKidMode ? 'border-purple-100' : 'border-white/20 dark:border-white/5'}`}>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Asystent AI — {currentCard.front}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <button onClick={() => callAI(`Napisz jedno nowe zdanie w języku ${langName} z użyciem: "${currentCard.front}". Pod spodem podaj polskie tłumaczenie. Krótko i zwięźle.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-semibold text-sm hover:bg-indigo-100 transition-all disabled:opacity-50 active:scale-95">
+              <button onClick={() => callAI(`Write one new sentence in ${langName} using: "${currentCard.front}". Below it, provide the translation in ${nll}. Keep it short and clear.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-semibold text-sm hover:bg-indigo-100 transition-all disabled:opacity-50 active:scale-95">
                 <Sparkles className="h-4 w-4 shrink-0" />Przykład
               </button>
               <button onClick={() => callAI(`Briefly explain in ${nll} the grammatical and semantic nuances of "${currentCard.front}" in ${langName}. What do learners typically find difficult?`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 font-semibold text-sm hover:bg-purple-100 transition-all disabled:opacity-50 active:scale-95">
                 <BookOpen className="h-4 w-4 shrink-0" />Gramatyka
               </button>
-              <button onClick={() => callAI(`Stwórz krótką zabawną mnemotechnikę pomagającą zapamiętać "${currentCard.front}" (${currentCard.back}) osobie polskojęzycznej.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 font-semibold text-sm hover:bg-amber-100 transition-all disabled:opacity-50 active:scale-95">
+              <button onClick={() => callAI(`Create a short, fun mnemonic in ${nll} to help remember "${currentCard.front}" (${currentCard.back}).`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 font-semibold text-sm hover:bg-amber-100 transition-all disabled:opacity-50 active:scale-95">
                 <Brain className="h-4 w-4 shrink-0" />Pamięć
               </button>
-              <button onClick={() => callAI(`Wygeneruj krótkie pytanie testowe A/B/C sprawdzające znajomość "${currentCard.front}" w języku ${langName}. Na końcu podaj poprawną odpowiedź.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 font-semibold text-sm hover:bg-emerald-100 transition-all disabled:opacity-50 active:scale-95">
+              <button onClick={() => callAI(`Generate a short A/B/C quiz question in ${nll} testing knowledge of "${currentCard.front}" in ${langName}. At the end give the correct answer.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 font-semibold text-sm hover:bg-emerald-100 transition-all disabled:opacity-50 active:scale-95">
                 <HelpCircle className="h-4 w-4 shrink-0" />Quiz
               </button>
             </div>
@@ -1609,11 +1615,11 @@ function Vocabulary({ user, isKidMode, lang, nativeLang: _nativeLang = 'pl' }: {
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/vocabulary?userId=${user.id}`)
+    fetch(`/api/vocabulary?userId=${user.id}&lang=${lang}`)
       .then(res => res.json())
       .then(setWords)
       .finally(() => setLoading(false));
-  }, [user.id]);
+  }, [user.id, lang]);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
