@@ -323,6 +323,89 @@ async function generateAndCachePLTranslations(id: string, segments: Array<{text:
   }
 }
 
+// Background: analyse vocabulary (frequency, POS, translation, example sentence) and cache in DB.
+async function generateWordAnalysis(id: string, transcript: string, lang: string) {
+  try {
+    // Count word frequencies
+    const stopwords = new Set([
+      'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did',
+      'will','would','could','should','may','might','shall','can','to','of','in','on','at','by','for',
+      'with','about','from','into','through','during','before','after','above','below','up','down',
+      'and','but','or','nor','so','yet','both','either','neither','not','no','if','then','than','that',
+      'this','these','those','it','its','i','you','he','she','we','they','me','him','her','us','them',
+      'my','your','his','our','their','what','which','who','whom','whose','when','where','why','how',
+      'der','die','das','den','dem','des','ein','eine','einen','einem','einer','eines','und','oder',
+      'aber','auch','mit','für','von','aus','an','in','auf','bei','nach','über','unter','vor','hinter',
+      'ist','sind','war','waren','hat','haben','wird','werden','kann','können','muss','müssen','soll',
+      'le','la','les','un','une','des','du','de','et','ou','mais','donc','car','que','qui','quoi',
+      'el','la','los','las','un','una','de','del','en','y','o','pero','también','que','con',
+      'il','lo','la','i','gli','le','un','una','di','da','in','e','o','ma','che','con',
+      'się','jest','są','być','nie','to','że','na','w','z','do','i','a','ale','jak','po',
+    ]);
+
+    const freqMap: Record<string, number> = {};
+    transcript.toLowerCase().replace(/[^a-záéíóúüäöñàèìòùâêîôûçşğışçöü\w\s'-]/gi, ' ')
+      .split(/\s+/)
+      .forEach(w => {
+        const clean = w.replace(/^['-]+|['-]+$/g, '').trim();
+        if (clean.length < 3 || stopwords.has(clean) || /^\d+$/.test(clean)) return;
+        freqMap[clean] = (freqMap[clean] || 0) + 1;
+      });
+
+    const top60 = Object.entries(freqMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 60)
+      .map(([word, freq]) => ({ word, freq }));
+
+    if (top60.length < 3) return;
+
+    const wordList = top60.map(({ word, freq }) => `${word} (${freq}x)`).join(', ');
+    const textSample = transcript.slice(0, 4000);
+
+    const prompt = `Masz listę ${top60.length} najczęstszych słów z tekstu w języku "${lang}" oraz fragment tego tekstu.
+Dla każdego słowa z listy zwróć JSON:
+[{"word":"<słowo>","translation":"<tłumaczenie po polsku>","pos":"noun|verb|adj|adv","example":"<krótkie zdanie z tekstu zawierające to słowo>","freq":<liczba_wystąpień>}]
+
+Zasady:
+- "pos": noun=rzeczownik, verb=czasownik, adj=przymiotnik, adv=przysłówek
+- "example": TYLKO zdanie które faktycznie zawiera to słowo (dosłownie skopiowane z tekstu, max 120 znaków)
+- "translation": tłumaczenie które pasuje do kontekstu tekstu, nie generyczne
+- Odpowiedz TYLKO JSON array, bez żadnego dodatkowego tekstu
+
+Słowa: ${wordList}
+
+Fragment tekstu:
+${textSample}`;
+
+    console.log(`[VOCAB] start bg analysis id=${id} words=${top60.length}`);
+    const result = await callAI(prompt);
+
+    let words: any[] = [];
+    try {
+      const parsed = JSON.parse(stripMarkdownJson(result));
+      if (Array.isArray(parsed)) words = parsed;
+    } catch {
+      // Try to extract partial JSON
+      const match = result.match(/\[[\s\S]+\]/);
+      if (match) {
+        try { words = JSON.parse(match[0]); } catch { return; }
+      }
+    }
+
+    if (words.length > 3) {
+      // Merge client-side freq data (in case AI missed some)
+      words = words.map(w => ({
+        ...w,
+        freq: w.freq ?? freqMap[w.word?.toLowerCase()] ?? 1,
+      }));
+      await prisma.transcriptSource.update({ where: { id }, data: { wordAnalysis: words } });
+      console.log(`[VOCAB] cached id=${id} count=${words.length}`);
+    }
+  } catch (e: any) {
+    console.error(`[VOCAB] bg failed id=${id}:`, e?.message || e);
+  }
+}
+
 app.get("/api/transcripts/:id/segments", async (req, res) => {
     try {
       const { id } = req.params;
@@ -358,6 +441,11 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
             if (!hasTrans) {
               generateAndCachePLTranslations(id, cached as any).catch(() => {});
             }
+            // Kick off vocabulary analysis if not yet cached
+            const hasVocab = Array.isArray(source.wordAnalysis) && (source.wordAnalysis as any[]).length > 3;
+            if (!hasVocab && source.transcript) {
+              generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+            }
             return res.json({
               segments: cached,
               translations: hasTrans ? source.segTranslations : null,
@@ -392,10 +480,31 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
       console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length} sample=${JSON.stringify(segments[0])}`);
       generateAndCachePLTranslations(id, segments).catch(() => {}); // fire-and-forget
+      generateWordAnalysis(id, source.transcript, source.lang).catch(() => {}); // fire-and-forget
       res.json({ segments, translations: null });
     } catch (error: any) {
       console.error("[SEGMENTS] error:", error?.message || error);
       res.status(500).json({ error: error?.message || "Błąd pobierania segmentów" });
+    }
+  });
+
+  // Transcript: Vocabulary analysis (word frequency + POS + translation, generated in background)
+  app.get("/api/transcripts/:id/vocabulary", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const source = await prisma.transcriptSource.findUnique({
+        where: { id },
+        select: { wordAnalysis: true, transcript: true, lang: true },
+      });
+      if (!source) return res.status(404).json({ error: "Not found" });
+      const ready = Array.isArray(source.wordAnalysis) && (source.wordAnalysis as any[]).length > 3;
+      if (!ready && source.transcript) {
+        // Kick off background generation if not yet done
+        generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+      }
+      res.json({ words: ready ? source.wordAnalysis : null, ready: !!ready });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message });
     }
   });
 

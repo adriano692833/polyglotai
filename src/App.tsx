@@ -2506,6 +2506,10 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
   const [translatingDual, setTranslatingDual] = useState(false);
   const [popup, setPopup] = useState<WordPopup | null>(null);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+  type WordEntry = { word: string; translation: string; pos: 'noun'|'verb'|'adj'|'adv'; example: string; freq: number };
+  const [wordAnalysis, setWordAnalysis] = useState<WordEntry[]>([]);
+  const [vocabTab, setVocabTab] = useState<'all'|'noun'|'verb'|'adj'|'adv'>('all');
+  const [showVocab, setShowVocab] = useState(false);
 
   const playerRef = useRef<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2618,6 +2622,8 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     setSegsError('');
     setSegments([]);
     setSegTranslations({});
+    setWordAnalysis([]);
+    setShowVocab(false);
     setCurrentTime(0);
     prevSegIdxRef.current = -1;
 
@@ -2680,6 +2686,32 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     return () => { stopped = true; clearTimeout(timer); };
   }, [selectedTranscript?.id, segments.length]);
 
+  // Poll server for background-generated word analysis
+  useEffect(() => {
+    if (!selectedTranscript) return;
+    if (wordAnalysis.length > 0) return;
+    let stopped = false;
+    let attempts = 0;
+    const poll = () => {
+      if (stopped || attempts >= 24) return;
+      attempts++;
+      fetch(`/api/transcripts/${selectedTranscript.id}/vocabulary`)
+        .then(r => r.json())
+        .then(d => {
+          if (stopped) return;
+          if (Array.isArray(d.words) && d.words.length > 3) {
+            setWordAnalysis(d.words);
+            stopped = true;
+          } else {
+            setTimeout(poll, 5000);
+          }
+        })
+        .catch(() => { if (!stopped) setTimeout(poll, 5000); });
+    };
+    const t = setTimeout(poll, 5000);
+    return () => { stopped = true; clearTimeout(t); };
+  }, [selectedTranscript?.id]);
+
   // Per-segment dual-subtitle translation (lazy, cached)
   useEffect(() => {
     if (!dualSubs || currentSegIdx < 0 || currentSegIdx === prevSegIdxRef.current) return;
@@ -2726,7 +2758,10 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = Math.min(rect.left + rect.width / 2 - 110, window.innerWidth - 240);
     const y = Math.max(rect.top - 10, 10);
-    setPopup({ word: clean, x, y, translation: null, saving: false });
+    // Check pre-cached vocabulary first (instant)
+    const cached = wordAnalysis.find(w => w.word.toLowerCase() === clean.toLowerCase());
+    setPopup({ word: clean, x, y, translation: cached?.translation || null, saving: false });
+    if (cached?.translation) return; // instant — no AI call needed
 
     try {
       const segCtx = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
@@ -2739,7 +2774,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     } catch {
       setPopup(p => p?.word === clean ? { ...p, translation: '—' } : p);
     }
-  }, [lang, currentSegIdx, segments]);
+  }, [lang, currentSegIdx, segments, wordAnalysis]);
 
   const saveToVocab = async () => {
     if (!popup?.translation || popup.saving) return;
@@ -2817,7 +2852,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
           userId={user.id}
           lang={lang}
           selectedId={selectedTranscript?.id || null}
-          onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setSavedWords(new Set()); onSourceChange?.(t); }}
+          onSelect={t => { setSelectedTranscript(t); setSegTranslations({}); setWordAnalysis([]); setShowVocab(false); setSavedWords(new Set()); onSourceChange?.(t); }}
         />
       </div>
 
@@ -3014,6 +3049,99 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
         </div>
       )}
 
+      {/* ── Vocabulary analysis panel ── */}
+      {selectedTranscript && (
+        <div className={`rounded-[2rem] glass overflow-hidden ${isKidMode ? 'border border-purple-100/50' : ''}`}>
+          <button
+            onClick={() => setShowVocab(v => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg">📊</span>
+              <div className="text-left">
+                <p className="font-bold text-sm">Słownictwo transkrypcji</p>
+                <p className="text-xs text-slate-400">
+                  {wordAnalysis.length > 0
+                    ? `${wordAnalysis.length} najczęstszych słów z tłumaczeniami i przykładami`
+                    : 'Analiza w toku…'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {wordAnalysis.length === 0 && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
+              )}
+              <span className="text-slate-400 text-sm">{showVocab ? '▲' : '▼'}</span>
+            </div>
+          </button>
+
+          {showVocab && wordAnalysis.length > 0 && (
+            <div className="px-6 pb-6 space-y-4">
+              {/* POS filter tabs */}
+              <div className="flex gap-2 flex-wrap">
+                {(['all','noun','verb','adj','adv'] as const).map(tab => {
+                  const labels = { all: 'Wszystkie', noun: 'Rzeczowniki', verb: 'Czasowniki', adj: 'Przymiotniki', adv: 'Przysłówki' };
+                  const counts = { all: wordAnalysis.length, noun: wordAnalysis.filter(w=>w.pos==='noun').length, verb: wordAnalysis.filter(w=>w.pos==='verb').length, adj: wordAnalysis.filter(w=>w.pos==='adj').length, adv: wordAnalysis.filter(w=>w.pos==='adv').length };
+                  if (tab !== 'all' && counts[tab] === 0) return null;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setVocabTab(tab)}
+                      className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${vocabTab === tab ? 'brand-gradient text-white' : 'glass border border-white/15 text-slate-400 hover:text-white'}`}
+                    >
+                      {labels[tab]} <span className="opacity-60">({counts[tab]})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Word grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-1">
+                {wordAnalysis
+                  .filter(w => vocabTab === 'all' || w.pos === vocabTab)
+                  .sort((a, b) => b.freq - a.freq)
+                  .map((entry, i) => {
+                    const posColor = { noun: 'text-sky-400', verb: 'text-emerald-400', adj: 'text-amber-400', adv: 'text-violet-400' }[entry.pos] || 'text-slate-400';
+                    const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[entry.pos] || entry.pos;
+                    return (
+                      <div
+                        key={i}
+                        className="bg-white/5 dark:bg-white/3 rounded-xl p-3 border border-white/10 hover:border-brand-500/30 transition-colors cursor-pointer"
+                        onClick={() => {
+                          const rect = document.body.getBoundingClientRect();
+                          setPopup({ word: entry.word, x: window.innerWidth / 2 - 120, y: window.innerHeight / 2 - 80, translation: entry.translation, saving: false });
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm">{entry.word}</span>
+                              <span className={`text-[10px] font-semibold uppercase tracking-wide ${posColor}`}>{posLabel}</span>
+                              <span className="text-[10px] text-slate-500">{entry.freq}×</span>
+                            </div>
+                            <p className={`text-sm font-semibold mt-0.5 ${isKidMode ? 'text-purple-400' : 'text-brand-400'}`}>{entry.translation}</p>
+                            {entry.example && (
+                              <p className="text-[11px] text-slate-400 italic mt-1 leading-snug line-clamp-2">„{entry.example}"</p>
+                            )}
+                          </div>
+                          <div className="shrink-0 flex flex-col items-center gap-1">
+                            <div className="w-1.5 bg-slate-700 rounded-full overflow-hidden" style={{height:'32px'}}>
+                              <div
+                                className="w-full rounded-full bg-brand-500 transition-all"
+                                style={{ height: `${Math.min(100, (entry.freq / (wordAnalysis[0]?.freq || 1)) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Word popup ── */}
       <AnimatePresence>
         {popup && (
@@ -3033,13 +3161,27 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
               <X className="h-3.5 w-3.5 opacity-60" />
             </button>
 
-            <p className="font-black text-xl tracking-tight pr-6">{popup.word}</p>
+            <div className="flex items-center gap-2 pr-6 flex-wrap">
+              <p className="font-black text-xl tracking-tight">{popup.word}</p>
+              {(() => {
+                const entry = wordAnalysis.find(w => w.word.toLowerCase() === popup.word.toLowerCase());
+                if (!entry) return null;
+                const posColor = { noun: 'text-sky-400 bg-sky-400/10', verb: 'text-emerald-400 bg-emerald-400/10', adj: 'text-amber-400 bg-amber-400/10', adv: 'text-violet-400 bg-violet-400/10' }[entry.pos] || '';
+                const posLabel = { noun: 'rzecz.', verb: 'czas.', adj: 'przym.', adv: 'przysł.' }[entry.pos] || entry.pos;
+                return <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${posColor}`}>{posLabel}</span>;
+              })()}
+            </div>
             <div className="min-h-[1.5rem] mt-1">
               {popup.translation === null
                 ? <span className="text-slate-400 text-sm animate-pulse">Tłumaczę...</span>
                 : <span className={`font-bold text-base ${isKidMode ? 'text-purple-400' : 'text-brand-400'}`}>{popup.translation}</span>
               }
             </div>
+            {(() => {
+              const entry = wordAnalysis.find(w => w.word.toLowerCase() === popup.word.toLowerCase());
+              if (!entry?.example) return null;
+              return <p className="text-[11px] text-slate-400 italic mt-1 leading-snug">„{entry.example}"</p>;
+            })()}
 
             <div className="flex gap-2 mt-3.5">
               <button

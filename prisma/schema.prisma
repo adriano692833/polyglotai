@@ -120,6 +120,7 @@ model TranscriptSource {
   transcript      String
   segments        Json?
   segTranslations Json?
+  wordAnalysis    Json?
   lang            String   @default("en")
   createdAt       DateTime @default(now())
   flashcards      Flashcard[]
