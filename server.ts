@@ -324,7 +324,7 @@ async function generateAndCachePLTranslations(id: string, segments: Array<{text:
 }
 
 // Background: analyse vocabulary (frequency, POS, translation, example sentence) and cache in DB.
-async function generateWordAnalysis(id: string, transcript: string, lang: string) {
+async function generateWordAnalysis(id: string, transcript: string, lang: string, targetLang = 'Polish') {
   try {
     const stopwords = new Set([
       // English
@@ -378,23 +378,23 @@ async function generateWordAnalysis(id: string, transcript: string, lang: string
     const wordList = top60.map(({ word, freq }) => `"${word}" (${freq}x)`).join(', ');
     const textSample = transcript.slice(0, 4000);
 
-    const prompt = `Jesteś ekspertem języka "${lang}". Masz listę słów z tekstu i fragment tego tekstu.
+    const prompt = `You are an expert in the "${lang}" language. You have a list of words from a text and a fragment of that text.
 
-ZADANIE: Dla każdego słowa z listy utwórz obiekt JSON z polami:
-- "word": słowo dokładnie tak jak w liście (małe litery)
-- "translation": POLSKIE tłumaczenie (PO POLSKU! np. "dom", "biegać", "piękny")
-- "pos": DOKŁADNIE jedna z czterech wartości: "noun" (rzeczownik), "verb" (czasownik), "adj" (przymiotnik), "adv" (przysłówek)
-- "example": krótkie zdanie (max 100 znaków) DOSŁOWNIE skopiowane z poniższego tekstu, które zawiera to słowo; jeśli nie ma — zostaw pusty string ""
-- "freq": liczba wystąpień (podana w nawiasie)
+TASK: For each word in the list, create a JSON object with the fields:
+- "word": the word exactly as in the list (lowercase)
+- "translation": ${targetLang} translation (translated into ${targetLang}!)
+- "pos": EXACTLY one of four values: "noun", "verb", "adj" (adjective), "adv" (adverb)
+- "example": a short sentence (max 100 chars) COPIED VERBATIM from the text below that contains this word; if none — leave empty string ""
+- "freq": number of occurrences (given in parentheses)
 
-WAŻNE:
-- "translation" MUSI być po POLSKU — nie po angielsku, nie po niemiecku, nie po włosku!
-- "pos" MUSI być dokładnie jedną z: noun / verb / adj / adv
-- Odpowiedz TYLKO JSON array [], bez żadnego tekstu przed ani po
+IMPORTANT:
+- "translation" MUST be in ${targetLang} — not in any other language unless ${targetLang} IS that language!
+- "pos" MUST be exactly one of: noun / verb / adj / adv
+- Reply ONLY with a JSON array [], no text before or after
 
-Lista słów: ${wordList}
+Word list: ${wordList}
 
-Fragment tekstu (źródło przykładów):
+Text fragment (source of examples):
 ${textSample}`;
 
     console.log(`[VOCAB] start bg analysis id=${id} words=${top60.length} lang=${lang}`);
@@ -487,7 +487,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
             // Kick off vocabulary analysis if not yet cached
             const hasVocab = Array.isArray(source.wordAnalysis) && (source.wordAnalysis as any[]).length > 3;
             if (!hasVocab && source.transcript) {
-              generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+              generateWordAnalysis(id, source.transcript, source.lang, targetLang).catch(() => {});
             }
             return res.json({
               segments: cached,
@@ -523,7 +523,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
       console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length} sample=${JSON.stringify(segments[0])}`);
       generateAndCachePLTranslations(id, segments, targetLang).catch(() => {}); // fire-and-forget
-      generateWordAnalysis(id, source.transcript, source.lang).catch(() => {}); // fire-and-forget
+      generateWordAnalysis(id, source.transcript, source.lang, targetLang).catch(() => {}); // fire-and-forget
       res.json({ segments, translations: null });
     } catch (error: any) {
       console.error("[SEGMENTS] error:", error?.message || error);
@@ -536,6 +536,8 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
     try {
       const { id } = req.params;
       const refresh = req.query.refresh === '1';
+      const nativeLang = String(req.query.nativeLang || 'pl');
+      const targetLang = LANG_NAMES[nativeLang] || 'Polish';
       const source = await prisma.transcriptSource.findUnique({
         where: { id },
         select: { wordAnalysis: true, transcript: true, lang: true },
@@ -557,7 +559,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
             await prisma.transcriptSource.update({ where: { id }, data: { wordAnalysis: null } });
           }
           if (source.transcript) {
-            generateWordAnalysis(id, source.transcript, source.lang).catch(() => {});
+            generateWordAnalysis(id, source.transcript, source.lang, targetLang).catch(() => {});
           }
           return res.json({ words: null, ready: false });
         }

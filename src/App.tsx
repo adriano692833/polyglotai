@@ -640,13 +640,13 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'dashboard' && <Dashboard user={user} isKidMode={isKidMode} />}
-            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
-            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
-            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} />}
-            {activeTab === 'flashcards' && <Flashcards user={user} isKidMode={isKidMode} lang={globalLang} />}
-            {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} lang={globalLang} />}
-            {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} lang={globalLang} />}
-            {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} globalLang={globalLang} />}
+            {activeTab === 'practice' && <Practice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'reading' && <Reading user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'sentences' && <Sentences user={user} isKidMode={isKidMode} globalSource={globalSource} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'flashcards' && <Flashcards user={user} isKidMode={isKidMode} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} lang={globalLang} nativeLang={nativeLang} />}
+            {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} globalLang={globalLang} nativeLang={nativeLang} />}
             {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} lang={globalLang} nativeLang={nativeLang} />}
           </motion.div>
         </AnimatePresence>
@@ -1022,7 +1022,7 @@ function StatCard({ icon, label, value, subValue, barColor, progress }: any) {
   );
 }
 
-function Practice({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
+function Practice({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string; nativeLang?: string }) {
   const [activeSubTab, setActiveSubTab] = useState<'write' | 'translate'>('write');
 
   return (
@@ -1043,15 +1043,16 @@ function Practice({ user, isKidMode, globalSource, lang }: { user: AuthUser; isK
       </div>
 
       {activeSubTab === 'write' ? (
-        <WritePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} />
+        <WritePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} nativeLang={nativeLang} />
       ) : (
-        <TranslatePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} />
+        <TranslatePractice user={user} isKidMode={isKidMode} globalSource={globalSource} lang={lang} nativeLang={nativeLang} />
       )}
     </div>
   );
 }
 
-function WritePractice({ user, isKidMode, globalSource: _gs, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
+function WritePractice({ user, isKidMode, globalSource: _gs, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string; nativeLang?: string }) {
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
   const [text, setText] = useState('');
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -1060,26 +1061,26 @@ function WritePractice({ user, isKidMode, globalSource: _gs, lang }: { user: Aut
     if (!text.trim()) return;
     setChecking(true);
     try {
-      const prompt = `Jesteś cierpliwym nauczycielem języka. Uczeń napisał tekst w języku: ${lang}.
-Popraw WSZYSTKIE błędy (gramatyka, słownictwo, interpunkcja).
-Oceń tekst w skali 0-100.
-Dla KAŻDEGO błędu wytłumacz SZCZEGÓŁOWO po polsku: co jest źle, dlaczego i jak powinno być.
-Zwróć wynik WYŁĄCZNIE jako JSON:
+      const prompt = `You are a patient language teacher. The student wrote a text in: ${lang}.
+Correct ALL errors (grammar, vocabulary, punctuation).
+Score the text on a scale 0-100.
+For EACH error explain in detail in ${nll}: what is wrong, why, and how it should be.
+Return ONLY JSON:
 {
-  "corrected": "poprawiony tekst",
+  "corrected": "corrected text",
   "score": 85,
   "mistakes": [
     {
-      "original": "błędny fragment",
-      "corrected": "poprawny fragment",
-      "explanation": "wyjaśnienie po polsku",
+      "original": "wrong fragment",
+      "corrected": "correct fragment",
+      "explanation": "explanation in ${nll}",
       "category": "grammar|vocabulary|spelling"
     }
   ],
-  "praise": "co poszło dobrze",
-  "tip": "wskazówka na przyszłość"
+  "praise": "what went well (in ${nll})",
+  "tip": "tip for the future (in ${nll})"
 }
-Tekst ucznia: "${text}"`;
+Student's text: "${text}"`;
 
       const aiText = await requestAiText(prompt, true);
       const resultData = parseAiJson<any>(aiText, { corrected: '', score: 0, mistakes: [], praise: '', tip: '' });
@@ -1186,7 +1187,8 @@ Tekst ucznia: "${text}"`;
   );
 }
 
-function TranslatePractice({ user, isKidMode, globalSource: _gs, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
+function TranslatePractice({ user, isKidMode, globalSource: _gs, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string; nativeLang?: string }) {
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -1200,12 +1202,12 @@ function TranslatePractice({ user, isKidMode, globalSource: _gs, lang }: { user:
     setResult(null);
     setUserAnswer('');
     try {
-      const prompt = `Jesteś nauczycielem języka. Przygotuj zadanie tłumaczeniowe.
-Język docelowy: ${lang}. Poziom: ${level}. Temat: ${topic || 'codzienne sytuacje'}.
-Zwróć WYŁĄCZNIE JSON:
+      const prompt = `You are a language teacher. Prepare a translation exercise.
+Target language: ${lang}. Level: ${level}. Topic: ${topic || 'everyday situations'}.
+Return ONLY JSON:
 {
-  "polish": "jedno zdanie po polsku do przetłumaczenia",
-  "hint": "krótka wskazówka po polsku"
+  "polish": "one sentence in ${nll} to be translated",
+  "hint": "short hint in ${nll}"
 }`;
       const aiText = await requestAiText(prompt, true);
       const data = parseAiJson<any>(aiText, {});
@@ -1221,16 +1223,16 @@ Zwróć WYŁĄCZNIE JSON:
     if (!userAnswer.trim()) return;
     setChecking(true);
     try {
-      const prompt = `Oceń tłumaczenie ucznia.
-Język docelowy: ${lang}
-Zdanie bazowe po polsku: "${currentTask?.polish || ''}"
-Odpowiedź ucznia: "${userAnswer}"
-Poziom: ${level}
-Zwróć WYŁĄCZNIE JSON:
+      const prompt = `Evaluate the student's translation.
+Target language: ${lang}
+Base sentence in ${nll}: "${currentTask?.polish || ''}"
+Student's answer: "${userAnswer}"
+Level: ${level}
+Return ONLY JSON:
 {
   "score": 0,
-  "feedback": "krótki feedback po polsku",
-  "correction": "poprawna wersja odpowiedzi ucznia w języku docelowym"
+  "feedback": "brief feedback in ${nll}",
+  "correction": "correct version of the student's answer in the target language"
 }`;
       const aiText = await requestAiText(prompt, true);
       const data = parseAiJson<any>(aiText, {});
@@ -1314,7 +1316,8 @@ Zwróć WYŁĄCZNIE JSON:
   );
 }
 
-function Flashcards({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
+function Flashcards({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; lang: string; nativeLang?: string }) {
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
   // Card data
   const [allCards, setAllCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1410,7 +1413,7 @@ function Flashcards({ user, isKidMode, lang }: { user: AuthUser; isKidMode: bool
     setGenerating(true); setStatusMessage('Generowanie fiszek...');
     try {
       const ctx = selectedTranscript ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}` : '';
-      const prompt = `Stwórz 12 fiszek do nauki języka ${lang} na temat: ${topic || 'codzienne sytuacje'}.\n${ctx}\nZwróć WYŁĄCZNIE JSON (tablica):\n[{ "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }]`;
+      const prompt = `Create 12 flashcards for learning ${lang} on the topic: ${topic || 'everyday situations'}.\n${ctx}\nReturn ONLY JSON (array):\n[{ "front": "word or phrase in ${lang}", "back": "translation in ${nll}" }]`;
       const cardsData = parseAiJson<any[]>(await requestAiText(prompt, true), []);
       const saveRes = await fetch('/api/flashcards/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }) });
       const data = await saveRes.json();
@@ -1429,7 +1432,7 @@ function Flashcards({ user, isKidMode, lang }: { user: AuthUser; isKidMode: bool
     setQuickGenerating(true); setStatusMessage('Generowanie fiszek na zawołanie...');
     try {
       const ctx = selectedTranscript ? `Użyj kontekstu transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 6000)}` : '';
-      const prompt = `Na podstawie polecenia wygeneruj 3 fiszki do nauki języka ${lang}.\nPolecenie: "${quickPrompt}".\n${ctx}\nZwróć WYŁĄCZNIE JSON (tablica):\n[{ "front": "słówko lub zwrot w ${lang}", "back": "tłumaczenie po polsku" }]`;
+      const prompt = `Based on the instruction, generate 3 flashcards for learning ${lang}.\nInstruction: "${quickPrompt}".\n${ctx}\nReturn ONLY JSON (array):\n[{ "front": "word or phrase in ${lang}", "back": "translation in ${nll}" }]`;
       const cardsData = parseAiJson<any[]>(await requestAiText(prompt, true), []).filter((c: any) => c?.front && c?.back);
       if (!cardsData.length) { setStatusMessage('Brak fiszek w odpowiedzi AI.'); return; }
       const saveRes = await fetch('/api/flashcards/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, lang, cards: cardsData, transcriptSourceId: selectedTranscript?.id || null }) });
@@ -1551,7 +1554,7 @@ function Flashcards({ user, isKidMode, lang }: { user: AuthUser; isKidMode: bool
               <button onClick={() => callAI(`Napisz jedno nowe zdanie w języku ${langName} z użyciem: "${currentCard.front}". Pod spodem podaj polskie tłumaczenie. Krótko i zwięźle.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 font-semibold text-sm hover:bg-indigo-100 transition-all disabled:opacity-50 active:scale-95">
                 <Sparkles className="h-4 w-4 shrink-0" />Przykład
               </button>
-              <button onClick={() => callAI(`Wyjaśnij krótko po polsku niuanse gramatyczne i znaczeniowe wyrazu "${currentCard.front}" w języku ${langName}. Co sprawia trudność osobom polskojęzycznym?`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 font-semibold text-sm hover:bg-purple-100 transition-all disabled:opacity-50 active:scale-95">
+              <button onClick={() => callAI(`Briefly explain in ${nll} the grammatical and semantic nuances of "${currentCard.front}" in ${langName}. What do learners typically find difficult?`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 font-semibold text-sm hover:bg-purple-100 transition-all disabled:opacity-50 active:scale-95">
                 <BookOpen className="h-4 w-4 shrink-0" />Gramatyka
               </button>
               <button onClick={() => callAI(`Stwórz krótką zabawną mnemotechnikę pomagającą zapamiętać "${currentCard.front}" (${currentCard.back}) osobie polskojęzycznej.`)} disabled={aiLoading} className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 font-semibold text-sm hover:bg-amber-100 transition-all disabled:opacity-50 active:scale-95">
@@ -1598,7 +1601,7 @@ function Badge({ children, variant = 'default', className = '' }: { children: Re
   return <span className={`${base} ${variants[variant]} ${className}`}>{children}</span>;
 }
 
-function Vocabulary({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
+function Vocabulary({ user, isKidMode, lang, nativeLang: _nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; lang: string; nativeLang?: string }) {
   const [words, setWords] = useState<any[]>([]);
   const [newWord, setNewWord] = useState('');
   const [newTrans, setNewTrans] = useState('');
@@ -1718,10 +1721,10 @@ function Vocabulary({ user, isKidMode, lang }: { user: AuthUser; isKidMode: bool
     </div>
   );
 }
-function Translator({ user, isKidMode, globalLang }: { user: AuthUser; isKidMode: boolean; globalLang: string }) {
+function Translator({ user, isKidMode, globalLang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalLang: string; nativeLang?: string }) {
   const [sourceText, setSourceText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
-  const [sourceLang, setSourceLang] = useState('pl');
+  const [sourceLang, setSourceLang] = useState(nativeLang);
   const [targetLang, setTargetLang] = useState(globalLang);
   const [level, setLevel] = useState('none');
   const [style, setStyle] = useState('none');
@@ -1845,7 +1848,7 @@ Przetłumacz z ${sourceLang} na ${targetLang}: "${sourceText}"`;
   );
 }
 
-function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
+function Reading({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string; nativeLang?: string }) {
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [sentenceCount, setSentenceCount] = useState(10);
@@ -1864,11 +1867,12 @@ function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKi
     window.speechSynthesis.speak(utterance);
   };
 
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
+
   const translateWord = async (word: string, sentenceContext?: string) => {
     try {
       const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
-      const nll = NATIVE_LANG_NAME[lang] || 'Polish'; // Reading uses 'lang' as native since it doesn't have nativeLang prop yet
-      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to Polish. Reply ONLY with the contextual translation.`;
+      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`;
       const responseText = await requestAiText(prompt, false);
       return responseText.trim() || null;
     } catch (err) {
@@ -1923,22 +1927,22 @@ function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKi
       const transcriptContext = selectedTranscript
         ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
         : '';
-      const prompt = `Jesteś nauczycielem języka. Stwórz tekst do czytania w języku: ${lang}.
-Poziom: ${level}.
-Temat: ${topic || 'dowolny ciekawy temat'}.
-Liczba zdań: ${sentenceCount}.
+      const prompt = `You are a language teacher. Create a reading text in: ${lang}.
+Level: ${level}.
+Topic: ${topic || 'any interesting topic'}.
+Number of sentences: ${sentenceCount}.
 ${transcriptContext}
-Zwróć wynik WYŁĄCZNIE jako JSON:
+Return ONLY JSON:
 {
-  "title": "tytuł tekstu",
+  "title": "text title",
   "sentences": [
-    {"original": "zdanie w języku obcym", "translation": "tłumaczenie na polski"}
+    {"original": "sentence in the foreign language", "translation": "translation in ${nll}"}
   ],
   "vocabulary": [
-    {"word": "słówko", "translation": "tłumaczenie", "context": "zdanie z tekstu"}
+    {"word": "word", "translation": "translation in ${nll}", "context": "sentence from the text"}
   ],
   "questions": [
-    {"question": "pytanie po polsku", "answer": "odpowiedź po polsku"}
+    {"question": "question in ${nll}", "answer": "answer in ${nll}"}
   ]
 }`;
 
@@ -2109,7 +2113,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string }) {
+function Sentences({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; globalSource?: TranscriptSource | null; lang: string; nativeLang?: string }) {
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -2141,7 +2146,7 @@ function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; is
       isTranslating.current = true;
       try {
         const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
-        const t = await requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to Polish. Reply ONLY with the contextual translation.`, false);
+        const t = await requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: t.trim(), x, y });
       } catch {
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: null, x, y });
@@ -2163,13 +2168,13 @@ function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; is
       const transcriptContext = selectedTranscript
         ? `Bazuj na transkrypcji "${selectedTranscript.title}": ${selectedTranscript.transcript.slice(0, 8000)}.`
         : '';
-      const prompt = `Jesteś nauczycielem języka. Stwórz 10 ciekawych zdań w języku: ${lang}.
-Poziom: ${level}.
-Temat: ${topic || 'codzienne sytuacje'}.
+      const prompt = `You are a language teacher. Create 10 interesting sentences in: ${lang}.
+Level: ${level}.
+Topic: ${topic || 'everyday situations'}.
 ${transcriptContext}
-Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
+Return ONLY JSON (array of objects):
 [
-  {"original": "zdanie", "translation": "tłumaczenie", "explanation": "krótkie wyjaśnienie gramatyki po polsku"}
+  {"original": "sentence", "translation": "translation in ${nll}", "explanation": "short grammar explanation in ${nll}"}
 ]`;
       const aiText = await requestAiText(prompt, true);
       const data = parseAiJson<any[]>(aiText, []);
@@ -2265,7 +2270,8 @@ Zwróć wynik WYŁĄCZNIE jako JSON (tablica obiektów):
   );
 }
 
-function Challenge({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boolean; lang: string }) {
+function Challenge({ user, isKidMode, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; lang: string; nativeLang?: string }) {
+  const nll = NATIVE_LANG_NAME[nativeLang] || 'Polish';
   const [level, setLevel] = useState('a1');
   const [topic, setTopic] = useState(PRACTICE_TOPICS[0].name);
   const [generating, setGenerating] = useState(false);
@@ -2279,14 +2285,14 @@ function Challenge({ user, isKidMode, lang }: { user: AuthUser; isKidMode: boole
     setResult(null);
     setAnswer('');
     try {
-      const prompt = `Jesteś nauczycielem języka. Stwórz codzienne wyzwanie pisemne w języku: ${lang}.
-Poziom: ${level}.
-Temat: ${topic}.
-Zwróć wynik WYŁĄCZNIE jako JSON:
+      const prompt = `You are a language teacher. Create a daily writing challenge in: ${lang}.
+Level: ${level}.
+Topic: ${topic}.
+Return ONLY JSON:
 {
-  "title": "tytuł wyzwania",
-  "prompt": "polecenie co uczeń ma napisać (po polsku)",
-  "hints": ["podpowiedź 1", "podpowiedź 2"]
+  "title": "challenge title",
+  "prompt": "instruction for the student in ${nll}",
+  "hints": ["hint 1 in ${nll}", "hint 2 in ${nll}"]
 }`;
 
       const aiText = await requestAiText(prompt, true);
@@ -2303,16 +2309,16 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
     if (!answer.trim()) return;
     setChecking(true);
     try {
-      const prompt = `Oceń odpowiedź ucznia na wyzwanie: "${challenge.title}".
-Polecenie brzmiało: "${challenge.prompt}".
-Odpowiedź ucznia: "${answer}".
-Język: ${lang}.
-Oceń w skali 0-100. Podaj feedback po polsku.
-Zwróć wynik WYŁĄCZNIE jako JSON:
+      const prompt = `Evaluate the student's response to the challenge: "${challenge.title}".
+The instruction was: "${challenge.prompt}".
+Student's answer: "${answer}".
+Language: ${lang}.
+Score on a scale 0-100. Give feedback in ${nll}.
+Return ONLY JSON:
 {
   "score": 85,
-  "feedback": "Twoja opinia po polsku",
-  "correction": "poprawiona wersja tekstu"
+  "feedback": "your feedback in ${nll}",
+  "correction": "corrected version of the text"
 }`;
 
       const aiText = await requestAiText(prompt, true);
@@ -2832,7 +2838,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
     const poll = () => {
       if (stopped || attempts >= 24) return;
       attempts++;
-      fetch(`/api/transcripts/${selectedTranscript.id}/vocabulary`)
+      fetch(`/api/transcripts/${selectedTranscript.id}/vocabulary?nativeLang=${nativeLang}`)
         .then(r => r.json())
         .then(d => {
           if (stopped) return;
@@ -3213,7 +3219,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
                   onClick={e => {
                     e.stopPropagation();
                     setWordAnalysis([]);
-                    fetch(`/api/transcripts/${selectedTranscript!.id}/vocabulary?refresh=1`).catch(() => {});
+                    fetch(`/api/transcripts/${selectedTranscript!.id}/vocabulary?refresh=1&nativeLang=${nativeLang}`).catch(() => {});
                   }}
                   className="text-[10px] text-slate-500 hover:text-slate-300 px-2 py-1 rounded-lg hover:bg-white/5 transition-colors"
                   title="Wygeneruj ponownie"
