@@ -184,8 +184,8 @@ async function startServer() {
     }
   });
 
-  // Quick word translation via MyMemory (free, ~200ms, no AI cost)
-  // In-memory LRU-style cache — avoids re-translating the same words
+  // Quick word translation — DeepL Free (context-aware, high quality) with MyMemory fallback
+  // In-memory LRU-style cache keyed on source:target:word:ctx-prefix
   const quickTransCache = new Map<string, string>();
 
   app.get("/api/translate/quick", async (req, res) => {
@@ -193,30 +193,61 @@ async function startServer() {
       const q = String(req.query.q || '').trim().slice(0, 200);
       const source = String(req.query.source || 'auto');
       const target = String(req.query.target || 'en');
+      const ctx = String(req.query.ctx || '').trim().slice(0, 300);
       if (!q) return res.status(400).json({ error: 'Missing q' });
 
-      const cacheKey = `${source}:${target}:${q.toLowerCase()}`;
+      const cacheKey = `${source}:${target}:${q.toLowerCase()}:${ctx.slice(0, 60)}`;
       if (quickTransCache.has(cacheKey)) {
         return res.json({ translation: quickTransCache.get(cacheKey) });
       }
 
-      const apiKey = process.env.MYMEMORY_API_KEY || '';
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${source}|${target}${apiKey ? `&key=${apiKey}` : ''}`;
+      let translated = '';
 
-      const resp = await fetchWithTimeout(url, {}, 6000);
-      const data = await resp.json() as any;
+      // ── 1. DeepL Free (preferred — context-aware, best quality) ─────────────
+      const deeplKey = process.env.DEEPL_API_KEY || '';
+      if (deeplKey) {
+        try {
+          const body = new URLSearchParams();
+          body.set('text', q);
+          if (source !== 'auto') body.set('source_lang', source.toUpperCase());
+          body.set('target_lang', target.toUpperCase());
+          if (ctx) body.set('context', ctx);   // key: disambiguates verb vs noun
 
-      const translated: string = data?.responseData?.translatedText || '';
-      const status: number = data?.responseStatus || 0;
-
-      if (status === 200 && translated && translated.toLowerCase() !== q.toLowerCase()) {
-        // Evict oldest when cache is full
-        if (quickTransCache.size >= 3000) quickTransCache.delete(quickTransCache.keys().next().value!);
-        quickTransCache.set(cacheKey, translated.trim());
-        return res.json({ translation: translated.trim() });
+          const resp = await fetchWithTimeout('https://api-free.deepl.com/v2/translate', {
+            method: 'POST',
+            headers: {
+              'Authorization': `DeepL-Auth-Key ${deeplKey}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+          }, 6000);
+          const data = await resp.json() as any;
+          translated = (data?.translations?.[0]?.text || '').trim();
+        } catch (e: any) {
+          console.error('[DEEPL]', e?.message);
+        }
       }
 
-      // MyMemory had nothing useful — client will fall back to AI
+      // ── 2. MyMemory fallback (no context, but free without key) ─────────────
+      if (!translated) {
+        const mmKey = process.env.MYMEMORY_API_KEY || '';
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${source}|${target}${mmKey ? `&key=${mmKey}` : ''}`;
+        const resp = await fetchWithTimeout(url, {}, 6000);
+        const data = await resp.json() as any;
+        const status: number = data?.responseStatus || 0;
+        const t: string = (data?.responseData?.translatedText || '').trim();
+        if (status === 200 && t && t.toLowerCase() !== q.toLowerCase()) {
+          translated = t;
+        }
+      }
+
+      if (translated) {
+        if (quickTransCache.size >= 3000) quickTransCache.delete(quickTransCache.keys().next().value!);
+        quickTransCache.set(cacheKey, translated);
+        return res.json({ translation: translated });
+      }
+
+      // Nothing useful — client falls back to AI
       return res.status(422).json({ error: 'No translation' });
     } catch (err: any) {
       console.error('[QUICKTRANS]', err?.message);

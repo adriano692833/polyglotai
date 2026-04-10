@@ -37,9 +37,11 @@ async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
   }
 }
 
-async function translateWordQuick(word: string, source: string, target: string): Promise<string | null> {
+async function translateWordQuick(word: string, source: string, target: string, context?: string): Promise<string | null> {
   try {
-    const resp = await fetch(`/api/translate/quick?q=${encodeURIComponent(word)}&source=${source}&target=${target}`);
+    const params = new URLSearchParams({ q: word, source, target });
+    if (context) params.set('ctx', context.slice(0, 200));
+    const resp = await fetch(`/api/translate/quick?${params}`);
     if (!resp.ok) return null;
     const data = await resp.json();
     return (data.translation as string) || null;
@@ -1889,7 +1891,7 @@ function Reading({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { u
 
   const translateWord = async (word: string, sentenceContext?: string) => {
     try {
-      const quick = await translateWordQuick(word, lang, nativeLang);
+      const quick = await translateWordQuick(word, lang, nativeLang, sentenceContext);
       if (quick) return quick;
       const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
       const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`;
@@ -1926,8 +1928,8 @@ function Reading({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { u
       } else {
         isTranslating.current = true;
         const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
-        const aiPromise = requestAiText(`${ctx}Translate the word "${cleanWord}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
-        const quick = await translateWordQuick(cleanWord, lang, nativeLang);
+        const aiPromise = requestAiText(`${ctx}Translate the word "${cleanWord}" from language "${lang}" to ${nll}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`, false);
+        const quick = await translateWordQuick(cleanWord, lang, nativeLang, sentenceContext);
         if (quick && hoverRequestId.current === requestId) setHoveredWord({ word: cleanWord, translation: quick, x, y });
         try {
           const accurate = (await aiPromise).trim();
@@ -2170,8 +2172,8 @@ function Sentences({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: {
       isTranslating.current = true;
       try {
         const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
-        const aiPromise = requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
-        const quick = await translateWordQuick(clean, lang, nativeLang);
+        const aiPromise = requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to ${nll}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`, false);
+        const quick = await translateWordQuick(clean, lang, nativeLang, sentenceContext);
         if (quick && hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: quick, x, y });
         const accurate = (await aiPromise).trim();
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: accurate || quick, x, y });
@@ -2521,9 +2523,9 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang, nativeLang = 
   const translateWord = async (word: string, sentenceContext?: string, onQuick?: (t: string) => void): Promise<string | null> => {
     try {
       const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
-      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nativeLangLabel}. Reply ONLY with the translation that fits the context.`;
+      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nativeLangLabel}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`;
       const aiPromise = requestAiText(prompt, false);
-      const quick = await translateWordQuick(word, lang, nativeLang);
+      const quick = await translateWordQuick(word, lang, nativeLang, sentenceContext);
       if (quick) onQuick?.(quick);
       const text = await aiPromise;
       return text.trim() || quick || null;
@@ -2945,11 +2947,11 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
       const ctx = ctxText ? `Sentence context: "${ctxText}"\n` : '';
       // Fire AI immediately — runs in parallel with MyMemory
       const aiPromise = requestAiText(
-        `${ctx}Translate the word/phrase "${clean}" from ${lang} to ${nativeLangLabel}. Reply ONLY with the translation that fits this context.`,
+        `${ctx}Translate the ${lang} word/phrase "${clean}" to ${nativeLangLabel}. Preserve part of speech (verb→verb, noun→noun). Reply ONLY with the translation.`,
         false
       );
-      // Show quick MyMemory result at ~200ms while AI is still working
-      const quick = await translateWordQuick(clean, lang, nativeLang);
+      // Show quick DeepL result at ~200ms while AI is still working
+      const quick = await translateWordQuick(clean, lang, nativeLang, ctxText);
       if (quick) setPopup(p => p?.word === clean ? { ...p, translation: quick } : p);
       // Replace with accurate AI result (has full context)
       const accurate = (await aiPromise).trim();

@@ -16,3 +16,7 @@ services:
         value: minimax/minimax-m2.5:free
       - key: SUPADATA_API_KEY
         sync: false
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: MYMEMORY_API_KEY
+        sync: false
