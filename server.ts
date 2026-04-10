@@ -300,13 +300,13 @@ async function startServer() {
     }
   });
 
-// Background: generate Polish translations for all segments and cache in DB.
+// Background: generate subtitle translations and cache in DB.
 // Called fire-and-forget — never awaited by the HTTP response.
-async function generateAndCachePLTranslations(id: string, segments: Array<{text: string; start: number; dur: number}>) {
+async function generateAndCachePLTranslations(id: string, segments: Array<{text: string; start: number; dur: number}>, targetLang = 'Polish') {
   try {
     const batch = segments.slice(0, 150);
     const lines = batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 9000);
-    const prompt = `Przetłumacz każdą linię na polski. Zachowaj numerację. Format odpowiedzi: "N. tłumaczenie"\n\n${lines}`;
+    const prompt = `Translate each line to ${targetLang}. Keep numbering. Format: "N. translation"\n\n${lines}`;
     console.log(`[TRANS] start bg translation id=${id} segs=${batch.length}`);
     const result = await callAI(prompt);
     const trans: Record<number, string> = {};
@@ -438,9 +438,20 @@ ${textSample}`;
   }
 }
 
+// English names for major native languages (used in AI prompts)
+const LANG_NAMES: Record<string, string> = {
+  pl:'Polish', en:'English', de:'German', es:'Spanish', fr:'French', it:'Italian',
+  pt:'Portuguese', ru:'Russian', zh:'Chinese', ja:'Japanese', ko:'Korean', ar:'Arabic',
+  nl:'Dutch', sv:'Swedish', no:'Norwegian', da:'Danish', fi:'Finnish', cs:'Czech',
+  sk:'Slovak', hu:'Hungarian', ro:'Romanian', bg:'Bulgarian', hr:'Croatian', uk:'Ukrainian',
+  tr:'Turkish', el:'Greek', he:'Hebrew', vi:'Vietnamese', th:'Thai', id:'Indonesian',
+};
+
 app.get("/api/transcripts/:id/segments", async (req, res) => {
     try {
       const { id } = req.params;
+      const nativeLang = String(req.query.nativeLang || 'pl');
+      const targetLang = LANG_NAMES[nativeLang] || 'Polish';
       const source = await prisma.transcriptSource.findUnique({ where: { id } });
       if (!source) return res.status(404).json({ error: "Nie znaleziono transkrypcji" });
 
@@ -471,7 +482,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
             // Already in seconds — kick off background translation if not yet cached
             const hasTrans = source.segTranslations && Object.keys(source.segTranslations).length > 5;
             if (!hasTrans) {
-              generateAndCachePLTranslations(id, cached as any).catch(() => {});
+              generateAndCachePLTranslations(id, cached as any, targetLang).catch(() => {});
             }
             // Kick off vocabulary analysis if not yet cached
             const hasVocab = Array.isArray(source.wordAnalysis) && (source.wordAnalysis as any[]).length > 3;
@@ -511,7 +522,7 @@ app.get("/api/transcripts/:id/segments", async (req, res) => {
       // Cache normalised segments in DB, then kick off background translation
       await prisma.transcriptSource.update({ where: { id }, data: { segments } });
       console.log(`[SEGMENTS] fetch:ok id=${id} count=${segments.length} sample=${JSON.stringify(segments[0])}`);
-      generateAndCachePLTranslations(id, segments).catch(() => {}); // fire-and-forget
+      generateAndCachePLTranslations(id, segments, targetLang).catch(() => {}); // fire-and-forget
       generateWordAnalysis(id, source.transcript, source.lang).catch(() => {}); // fire-and-forget
       res.json({ segments, translations: null });
     } catch (error: any) {

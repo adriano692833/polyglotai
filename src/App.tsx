@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X, Play } from 'lucide-react';
+import { Languages, User, LogOut, Loader2, BarChart3, PenTool, Layers, Globe, Star, Flame, Sparkles, Check, BookOpen, Target, Zap, ArrowRightLeft, Send, Trash2, Plus, Moon, Sun, LayoutDashboard, Book, MessageSquare, Trophy, Monitor, ChevronLeft, ChevronRight, Shuffle, RotateCcw, Brain, HelpCircle, X, Play, Settings } from 'lucide-react';
 import { AuthUser, TabId } from './lib/types';
 import { PRACTICE_LANGS, CEFR_LEVELS, TRANSLATION_STYLES, PRACTICE_TOPICS } from './lib/constants';
+import { t, UiLang, NATIVE_LANG_NAME, NATIVE_LANG_DISPLAY, UI_LANG_DISPLAY } from './i18n';
 
 // --- COMPONENTS ---
 async function requestAiText(prompt: string, isJson: boolean): Promise<string> {
@@ -283,6 +284,20 @@ export default function App() {
   const [globalLang, setGlobalLang] = useState<string>(() => localStorage.getItem('pg_lang') || 'en');
   useEffect(() => { localStorage.setItem('pg_lang', globalLang); }, [globalLang]);
 
+  // Native language — the language translations are shown IN (default: Polish)
+  const [nativeLang, setNativeLang] = useState<string>(() => localStorage.getItem('pg_native_lang') || 'pl');
+  useEffect(() => { localStorage.setItem('pg_native_lang', nativeLang); }, [nativeLang]);
+
+  // UI language — the language of app menus/labels (default: Polish)
+  const [uiLang, setUiLang] = useState<UiLang>(() => (localStorage.getItem('pg_ui_lang') as UiLang) || 'pl');
+  useEffect(() => { localStorage.setItem('pg_ui_lang', uiLang); }, [uiLang]);
+
+  const [showSettings, setShowSettings] = useState(false);
+  // Pending changes in settings modal
+  const [pendingNative, setPendingNative] = useState(nativeLang);
+  const [pendingUi, setPendingUi] = useState<UiLang>(uiLang);
+  const [pendingLearn, setPendingLearn] = useState(globalLang);
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -450,6 +465,15 @@ export default function App() {
                 {user.name}
               </div>
 
+              {/* Settings button */}
+              <button
+                onClick={() => { setPendingNative(nativeLang); setPendingUi(uiLang); setPendingLearn(globalLang); setShowSettings(true); }}
+                className="p-2 text-slate-400 hover:text-brand-500 hover:bg-brand-500/10 rounded-xl transition-all"
+                title={t('settings', uiLang)}
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+
               {/* Logout */}
               <button
                 onClick={logout}
@@ -461,18 +485,126 @@ export default function App() {
           </div>
         </header>
 
+      {/* ── Settings modal ── */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowSettings(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 12 }}
+              transition={{ duration: 0.18 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-slate-900 dark:bg-slate-950 border border-white/15 rounded-3xl shadow-2xl w-full max-w-md p-6 space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-brand-500/15">
+                    <Settings className="h-5 w-5 text-brand-400" />
+                  </div>
+                  <h2 className="text-lg font-black">{t('settingsTitle', uiLang)}</h2>
+                </div>
+                <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                  <X className="h-4 w-4 opacity-60" />
+                </button>
+              </div>
+
+              {/* Native language */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold">{t('nativeLangLabel', uiLang)}</label>
+                <p className="text-xs text-slate-400">{t('nativeLangHint', uiLang)}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {Object.entries(NATIVE_LANG_DISPLAY).map(([code, label]) => (
+                    <button
+                      key={code}
+                      onClick={() => setPendingNative(code)}
+                      className={`px-2.5 py-2 rounded-xl text-xs font-semibold text-left transition-all ${
+                        pendingNative === code
+                          ? 'bg-brand-500 text-white'
+                          : 'glass border border-white/10 hover:border-brand-500/40 text-slate-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Learning language */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold">{t('learnLangLabel', uiLang)}</label>
+                <select
+                  value={pendingLearn}
+                  onChange={e => setPendingLearn(e.target.value)}
+                  className="w-full glass border border-white/15 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {PRACTICE_LANGS.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name ?? l.code.toUpperCase()}</option>)}
+                </select>
+              </div>
+
+              {/* UI language */}
+              <div className="space-y-2">
+                <label className="block text-sm font-bold">{t('uiLangLabel', uiLang)}</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.entries(UI_LANG_DISPLAY) as [UiLang, string][]).map(([code, label]) => (
+                    <button
+                      key={code}
+                      onClick={() => setPendingUi(code)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                        pendingUi === code
+                          ? 'bg-brand-500 text-white'
+                          : 'glass border border-white/10 hover:border-brand-500/40 text-slate-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="flex-1 py-2.5 rounded-xl glass border border-white/15 text-sm font-semibold hover:border-white/30 transition-all"
+                >
+                  {t('cancel', uiLang)}
+                </button>
+                <button
+                  onClick={() => {
+                    setNativeLang(pendingNative);
+                    setUiLang(pendingUi);
+                    setGlobalLang(pendingLearn);
+                    setShowSettings(false);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl brand-gradient text-white text-sm font-bold transition-all hover:opacity-90"
+                >
+                  {t('save', uiLang)}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Navigation */}
       <nav className="mx-auto w-full max-w-6xl px-4 sm:px-6 pt-3 pb-1">
         <div className="flex flex-wrap gap-1 sm:gap-1.5">
-          <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Wyniki" : "Dashboard"} isKidMode={isKidMode} />
-          <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : "Ćwiczenia"} isKidMode={isKidMode} />
-          <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label="Czytanie" isKidMode={isKidMode} />
-          <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label="Zdania" isKidMode={isKidMode} />
-          <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Karty" : "Fiszki"} isKidMode={isKidMode} />
-          <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label="Słówka" isKidMode={isKidMode} />
-          <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label="Wyzwanie" isKidMode={isKidMode} />
-          <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label="Tłumacz" isKidMode={isKidMode} />
-          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label="YouTube" isKidMode={isKidMode} />
+          <NavButton id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} icon={<LayoutDashboard className="h-4 w-4" />} label={isKidMode ? "Wyniki" : t('dashboard', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="practice" active={activeTab === 'practice'} onClick={setActiveTab} icon={<PenTool className="h-4 w-4" />} label={isKidMode ? "Piszemy!" : t('write', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="reading" active={activeTab === 'reading'} onClick={setActiveTab} icon={<Book className="h-4 w-4" />} label={t('reading', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="sentences" active={activeTab === 'sentences'} onClick={setActiveTab} icon={<MessageSquare className="h-4 w-4" />} label={t('sentences', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="flashcards" active={activeTab === 'flashcards'} onClick={setActiveTab} icon={<Layers className="h-4 w-4" />} label={isKidMode ? "Karty" : t('flashcards', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="vocabulary" active={activeTab === 'vocabulary'} onClick={setActiveTab} icon={<BookOpen className="h-4 w-4" />} label={t('vocab', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="challenge" active={activeTab === 'challenge'} onClick={setActiveTab} icon={<Trophy className="h-4 w-4" />} label={t('challenge', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="translator" active={activeTab === 'translator'} onClick={setActiveTab} icon={<Globe className="h-4 w-4" />} label={t('translate', uiLang)} isKidMode={isKidMode} />
+          <NavButton id="transcripts" active={activeTab === 'transcripts'} onClick={setActiveTab} icon={<Monitor className="h-4 w-4" />} label={t('youtube', uiLang)} isKidMode={isKidMode} />
         </div>
       </nav>
 
@@ -515,7 +647,7 @@ export default function App() {
             {activeTab === 'vocabulary' && <Vocabulary user={user} isKidMode={isKidMode} lang={globalLang} />}
             {activeTab === 'challenge' && <Challenge user={user} isKidMode={isKidMode} lang={globalLang} />}
             {activeTab === 'translator' && <Translator user={user} isKidMode={isKidMode} globalLang={globalLang} />}
-            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} lang={globalLang} />}
+            {activeTab === 'transcripts' && <TranscriptHub user={user} isKidMode={isKidMode} onSourceChange={setGlobalSourceAndPersist} lang={globalLang} nativeLang={nativeLang} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1734,8 +1866,9 @@ function Reading({ user, isKidMode, globalSource, lang }: { user: AuthUser; isKi
 
   const translateWord = async (word: string, sentenceContext?: string) => {
     try {
-      const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
-      const prompt = `${ctx}Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko tłumaczenie pasujące do kontekstu, bez dodatkowego tekstu.`;
+      const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
+      const nll = NATIVE_LANG_NAME[lang] || 'Polish'; // Reading uses 'lang' as native since it doesn't have nativeLang prop yet
+      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to Polish. Reply ONLY with the contextual translation.`;
       const responseText = await requestAiText(prompt, false);
       return responseText.trim() || null;
     } catch (err) {
@@ -2007,8 +2140,8 @@ function Sentences({ user, isKidMode, globalSource, lang }: { user: AuthUser; is
       const reqId = ++hoverRequestId.current;
       isTranslating.current = true;
       try {
-        const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
-        const t = await requestAiText(`${ctx}Przetłumacz słowo "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem pasującym do kontekstu.`, false);
+        const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
+        const t = await requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to Polish. Reply ONLY with the contextual translation.`, false);
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: t.trim(), x, y });
       } catch {
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: null, x, y });
@@ -2283,7 +2416,7 @@ Zwróć wynik WYŁĄCZNIE jako JSON:
   );
 }
 
-function TranscriptHub({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
+function TranscriptHub({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string; nativeLang?: string }) {
   const [mode, setMode] = useState<'read' | 'play'>('play');
   return (
     <div className="space-y-4">
@@ -2311,13 +2444,13 @@ function TranscriptHub({ user, isKidMode, onSourceChange, lang }: { user: AuthUs
         </button>
       </div>
       {mode === 'play'
-        ? <VideoPlayer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} />
-        : <TranscriptViewer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} />}
+        ? <VideoPlayer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} nativeLang={nativeLang} />
+        : <TranscriptViewer user={user} isKidMode={isKidMode} onSourceChange={onSourceChange} lang={lang} nativeLang={nativeLang} />}
     </div>
   );
 }
 
-function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
+function TranscriptViewer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string; nativeLang?: string }) {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [hoveredWord, setHoveredWord] = useState<{ word: string, translation: string | null, x: number, y: number } | null>(null);
   const [formatting, setFormatting] = useState(false);
@@ -2343,6 +2476,8 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
     }
   };
 
+  const nativeLangLabel = NATIVE_LANG_NAME[nativeLang] || 'Polish';
+
   const speak = (text: string) => {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -2352,8 +2487,8 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
 
   const translateWord = async (word: string, sentenceContext?: string): Promise<string | null> => {
     try {
-      const ctx = sentenceContext ? `Kontekst zdania: "${sentenceContext}"\n` : '';
-      const prompt = `${ctx}Przetłumacz słowo "${word}" z języka o kodzie "${lang}" na polski. Podaj tylko tłumaczenie pasujące do kontekstu, bez dodatkowego tekstu.`;
+      const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
+      const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nativeLangLabel}. Reply ONLY with the translation that fits the context.`;
       const text = await requestAiText(prompt, false);
       return text.trim() || null;
     } catch {
@@ -2495,7 +2630,7 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang }: { user: Aut
 // ─────────────────────────────────────────────────────────────────────────────
 // Language Reactor-style Video Player tab
 // ─────────────────────────────────────────────────────────────────────────────
-function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string }) {
+function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' }: { user: AuthUser; isKidMode: boolean; onSourceChange?: (src: TranscriptSource | null) => void; lang: string; nativeLang?: string }) {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptSource | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [loadingSegs, setLoadingSegs] = useState(false);
@@ -2510,6 +2645,8 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
   const [wordAnalysis, setWordAnalysis] = useState<WordEntry[]>([]);
   const [vocabTab, setVocabTab] = useState<'all'|'noun'|'verb'|'adj'|'adv'>('all');
   const [showVocab, setShowVocab] = useState(false);
+
+  const nativeLangLabel = NATIVE_LANG_NAME[nativeLang] || 'Polish';
 
   const playerRef = useRef<any>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2627,7 +2764,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     setCurrentTime(0);
     prevSegIdxRef.current = -1;
 
-    fetch(`/api/transcripts/${selectedTranscript.id}/segments`)
+    fetch(`/api/transcripts/${selectedTranscript.id}/segments?nativeLang=${nativeLang}`)
       .then(r => r.json())
       .then(d => {
         if (Array.isArray(d.segments)) {
@@ -2722,7 +2859,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
     if (!seg) return;
 
     requestAiText(
-      `Przetłumacz to zdanie na polski (odpowiedz TYLKO tłumaczeniem): "${seg.text}"`,
+      `Translate to ${nativeLangLabel} (reply ONLY with the translation): "${seg.text}"`,
       false
     )
       .then(t => setSegTranslations(prev => ({ ...prev, [currentSegIdx]: t.trim() })))
@@ -2736,7 +2873,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
 
     setTranslatingDual(true);
     const batch = segments.slice(0, 80);
-    const prompt = `Przetłumacz każdą linię na polski. Zachowaj numerację. Format: "N. tłumaczenie"\n\n${batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 5000)}`;
+    const prompt = `Translate each line to ${nativeLangLabel}. Keep numbering. Format: "N. translation"\n\n${batch.map((s, i) => `${i}. ${s.text}`).join('\n').slice(0, 5000)}`;
     requestAiText(prompt, false)
       .then(result => {
         const trans: Record<number, string> = {};
@@ -2767,7 +2904,7 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang }: { user: AuthUser
       const segCtx = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
       const ctx = segCtx ? `Kontekst zdania: "${segCtx}"\n` : '';
       const t = await requestAiText(
-        `${ctx}Przetłumacz słowo/wyrażenie "${clean}" z języka ${lang} na polski. Odpowiedz TYLKO tłumaczeniem pasującym do tego kontekstu.`,
+        `${ctx}Translate the word/phrase "${clean}" from ${lang} to ${nativeLangLabel}. Reply ONLY with the translation that fits this context.`,
         false
       );
       setPopup(p => p?.word === clean ? { ...p, translation: t.trim() } : p);
