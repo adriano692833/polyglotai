@@ -2930,10 +2930,12 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
     if (cached?.translation) return; // instant — no AI call needed
 
     try {
-      const segCtx = currentSegIdx >= 0 ? (segments[currentSegIdx]?.text || '') : '';
-      const ctx = segCtx ? `Kontekst zdania: "${segCtx}"\n` : '';
-      const quick = await translateWordQuick(clean, lang, nativeLang);
-      const translation = quick ?? (await requestAiText(
+      // Use wider context (prev + current + next segment) for better accuracy with compound/OCR words
+      const start = Math.max(0, currentSegIdx - 1);
+      const end = Math.min(segments.length - 1, currentSegIdx + 1);
+      const ctxText = segments.slice(start, end + 1).map(s => s.text).join(' ');
+      const ctx = ctxText ? `Sentence context: "${ctxText}"\n` : '';
+      const translation = (await requestAiText(
         `${ctx}Translate the word/phrase "${clean}" from ${lang} to ${nativeLangLabel}. Reply ONLY with the translation that fits this context.`,
         false
       )).trim();
