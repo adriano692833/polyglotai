@@ -1925,10 +1925,14 @@ function Reading({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: { u
         }
       } else {
         isTranslating.current = true;
-        const translation = await translateWord(cleanWord, sentenceContext);
-        if (hoverRequestId.current === requestId) {
-          setHoveredWord({ word: cleanWord, translation, x, y });
-        }
+        const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
+        const aiPromise = requestAiText(`${ctx}Translate the word "${cleanWord}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
+        const quick = await translateWordQuick(cleanWord, lang, nativeLang);
+        if (quick && hoverRequestId.current === requestId) setHoveredWord({ word: cleanWord, translation: quick, x, y });
+        try {
+          const accurate = (await aiPromise).trim();
+          if (hoverRequestId.current === requestId) setHoveredWord({ word: cleanWord, translation: accurate || quick, x, y });
+        } catch { /* keep quick result if AI fails */ }
         isTranslating.current = false;
       }
     }, 300);
@@ -2166,9 +2170,11 @@ function Sentences({ user, isKidMode, globalSource, lang, nativeLang = 'pl' }: {
       isTranslating.current = true;
       try {
         const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
+        const aiPromise = requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
         const quick = await translateWordQuick(clean, lang, nativeLang);
-        const t = quick ?? await requestAiText(`${ctx}Translate the word "${clean}" from language "${lang}" to ${nll}. Reply ONLY with the contextual translation.`, false);
-        if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: (typeof t === 'string' ? t.trim() : t), x, y });
+        if (quick && hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: quick, x, y });
+        const accurate = (await aiPromise).trim();
+        if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: accurate || quick, x, y });
       } catch {
         if (hoverRequestId.current === reqId) setHoveredWord({ word: clean, translation: null, x, y });
       } finally {
@@ -2512,14 +2518,15 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang, nativeLang = 
     window.speechSynthesis.speak(utterance);
   };
 
-  const translateWord = async (word: string, sentenceContext?: string): Promise<string | null> => {
+  const translateWord = async (word: string, sentenceContext?: string, onQuick?: (t: string) => void): Promise<string | null> => {
     try {
-      const quick = await translateWordQuick(word, lang, nativeLang);
-      if (quick) return quick;
       const ctx = sentenceContext ? `Sentence context: "${sentenceContext}"\n` : '';
       const prompt = `${ctx}Translate the word "${word}" from language "${lang}" to ${nativeLangLabel}. Reply ONLY with the translation that fits the context.`;
-      const text = await requestAiText(prompt, false);
-      return text.trim() || null;
+      const aiPromise = requestAiText(prompt, false);
+      const quick = await translateWordQuick(word, lang, nativeLang);
+      if (quick) onQuick?.(quick);
+      const text = await aiPromise;
+      return text.trim() || quick || null;
     } catch {
       return null;
     }
@@ -2535,7 +2542,9 @@ function TranscriptViewer({ user, isKidMode, onSourceChange, lang, nativeLang = 
       if (!clean) return;
       const requestId = ++hoverRequestId.current;
       isTranslating.current = true;
-      const translation = await translateWord(clean, sentenceContext);
+      const translation = await translateWord(clean, sentenceContext, (quick) => {
+        if (hoverRequestId.current === requestId) setHoveredWord({ word: clean, translation: quick, x, y });
+      });
       if (hoverRequestId.current === requestId) {
         setHoveredWord({ word: clean, translation, x, y });
       }
@@ -2930,18 +2939,23 @@ function VideoPlayer({ user, isKidMode, onSourceChange, lang, nativeLang = 'pl' 
     if (cached?.translation) return; // instant — no AI call needed
 
     try {
-      // Use wider context (prev + current + next segment) for better accuracy with compound/OCR words
       const start = Math.max(0, currentSegIdx - 1);
       const end = Math.min(segments.length - 1, currentSegIdx + 1);
       const ctxText = segments.slice(start, end + 1).map(s => s.text).join(' ');
       const ctx = ctxText ? `Sentence context: "${ctxText}"\n` : '';
-      const translation = (await requestAiText(
+      // Fire AI immediately — runs in parallel with MyMemory
+      const aiPromise = requestAiText(
         `${ctx}Translate the word/phrase "${clean}" from ${lang} to ${nativeLangLabel}. Reply ONLY with the translation that fits this context.`,
         false
-      )).trim();
-      setPopup(p => p?.word === clean ? { ...p, translation } : p);
+      );
+      // Show quick MyMemory result at ~200ms while AI is still working
+      const quick = await translateWordQuick(clean, lang, nativeLang);
+      if (quick) setPopup(p => p?.word === clean ? { ...p, translation: quick } : p);
+      // Replace with accurate AI result (has full context)
+      const accurate = (await aiPromise).trim();
+      if (accurate) setPopup(p => p?.word === clean ? { ...p, translation: accurate } : p);
     } catch {
-      setPopup(p => p?.word === clean ? { ...p, translation: '—' } : p);
+      setPopup(p => p?.word === clean ? { ...p, translation: p?.translation || '—' } : p);
     }
   }, [lang, nativeLang, currentSegIdx, segments, wordAnalysis]);
 
