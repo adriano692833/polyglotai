@@ -184,6 +184,46 @@ async function startServer() {
     }
   });
 
+  // Quick word translation via MyMemory (free, ~200ms, no AI cost)
+  // In-memory LRU-style cache — avoids re-translating the same words
+  const quickTransCache = new Map<string, string>();
+
+  app.get("/api/translate/quick", async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim().slice(0, 200);
+      const source = String(req.query.source || 'auto');
+      const target = String(req.query.target || 'en');
+      if (!q) return res.status(400).json({ error: 'Missing q' });
+
+      const cacheKey = `${source}:${target}:${q.toLowerCase()}`;
+      if (quickTransCache.has(cacheKey)) {
+        return res.json({ translation: quickTransCache.get(cacheKey) });
+      }
+
+      const apiKey = process.env.MYMEMORY_API_KEY || '';
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=${source}|${target}${apiKey ? `&key=${apiKey}` : ''}`;
+
+      const resp = await fetchWithTimeout(url, {}, 6000);
+      const data = await resp.json() as any;
+
+      const translated: string = data?.responseData?.translatedText || '';
+      const status: number = data?.responseStatus || 0;
+
+      if (status === 200 && translated && translated.toLowerCase() !== q.toLowerCase()) {
+        // Evict oldest when cache is full
+        if (quickTransCache.size >= 3000) quickTransCache.delete(quickTransCache.keys().next().value!);
+        quickTransCache.set(cacheKey, translated.trim());
+        return res.json({ translation: translated.trim() });
+      }
+
+      // MyMemory had nothing useful — client will fall back to AI
+      return res.status(422).json({ error: 'No translation' });
+    } catch (err: any) {
+      console.error('[QUICKTRANS]', err?.message);
+      return res.status(500).json({ error: err?.message });
+    }
+  });
+
   // Transcript sources: List
   app.get("/api/transcripts", async (req, res) => {
     try {
